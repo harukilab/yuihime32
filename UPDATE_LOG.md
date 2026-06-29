@@ -1,6 +1,11 @@
 # YuiHime Project Updates Logs
 ---
 
+## [3.04] - 2026-06-29
+### Changed
+- **Pengecualian Berkas Pengaturan dari .gitignore**:
+  - Menghapus aturan penyembunyian berkas pengaturan di `.gitignore` untuk menjamin seluruh berkas konfigurasi (`config.toml`, `.yuihime/data/config.toml`, dll) selalu dilacak (*tracked*) secara aktif oleh Git agar hasil perubahan setelan tetap persisten saat proses ekspor ataupun pembagian repositori.
+
 ## [3.03] - 2026-06-29
 ### Fixed
 - **Perbaikan Kebocoran Log Lintas Sesi (Session Bleed) & Supresi TTS Palsu saat Hapus/Ganti Percakapan**:
