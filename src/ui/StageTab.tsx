@@ -1500,8 +1500,8 @@ export const StageTab: React.FC<StageTabProps> = ({
     // 2. Strip brackets/meta (e.g. [SYSTEM], [Yui - web_...], [Yui - tg_...])
     str = str.replace(/^\[[^\]]+\]:?\s*/g, '');
     
-    // 3. Lowercase and remove all non-alphanumeric characters
-    return str.toLowerCase().replace(/[^a-z0-9]/g, '');
+    // 3. Lowercase, trim, and normalize whitespaces to handle special characters gracefully
+    return str.toLowerCase().replace(/\s+/g, ' ').trim();
   };
 
   const parseTimestampToMs = (ts: any): number => {
@@ -1518,53 +1518,42 @@ export const StageTab: React.FC<StageTabProps> = ({
   const sortedTransient = [...(logs || [])].sort((a, b) => parseTimestampToMs(a.timestamp) - parseTimestampToMs(b.timestamp));
   const sortedPersistent = [...memoryLogs.filter(m => !m.isSystem)].sort((a, b) => parseTimestampToMs(a.timestamp) - parseTimestampToMs(b.timestamp));
 
-  // Merge sequences using Longest Common Subsequence (LCS) to completely eliminate time-drift double entries and align turns
-  const mergeLogSequences = (a: any[], b: any[]): any[] => {
-    const isMatch = (itemA: any, itemB: any) => {
-      if (itemA.type !== itemB.type) return false;
-      const normA = normalizeForDeduplication(itemA.content);
-      const normB = normalizeForDeduplication(itemB.content);
-      return normA === normB;
-    };
+  // Merge sequences using content comparison and time tolerance to completely eliminate double entries
+  const mergeLogSequences = (transientList: any[], persistentList: any[]): any[] => {
+    const result = [...transientList];
 
-    const n = a.length;
-    const m = b.length;
-    const dp: number[][] = Array.from({ length: n + 1 }, () => Array(m + 1).fill(0));
+    for (const p of persistentList) {
+      const pNorm = normalizeForDeduplication(p.content);
+      const matchIndex = result.findIndex(t => {
+        if (t.type !== p.type) return false;
+        const tNorm = normalizeForDeduplication(t.content);
+        if (tNorm !== pNorm) return false;
+        
+        const tMs = parseTimestampToMs(t.timestamp);
+        const pMs = parseTimestampToMs(p.timestamp);
+        // If timestamps are within 25 seconds of each other, they represent the same user/agent turn
+        return Math.abs(tMs - pMs) < 25000;
+      });
 
-    for (let i = 1; i <= n; i++) {
-      for (let j = 1; j <= m; j++) {
-        if (isMatch(a[i - 1], b[j - 1])) {
-          dp[i][j] = dp[i - 1][j - 1] + 1;
-        } else {
-          dp[i][j] = Math.max(dp[i - 1][j], dp[i][j - 1]);
-        }
-      }
-    }
-
-    const merged: any[] = [];
-    let i = n, j = m;
-
-    while (i > 0 || j > 0) {
-      if (i > 0 && j > 0 && isMatch(a[i - 1], b[j - 1])) {
-        // Match! Prefer properties from transient log (e.g., thoughts, isStreaming)
-        merged.push({
-          ...b[j - 1],
-          ...a[i - 1]
-        });
-        i--;
-        j--;
+      if (matchIndex !== -1) {
+        // Merge the fields, prioritizing the transient logs for UI state but keeping any persistent database fields
+        result[matchIndex] = {
+          ...p,
+          ...result[matchIndex]
+        };
       } else {
-        if (i > 0 && (j === 0 || dp[i][j] === dp[i - 1][j])) {
-          merged.push(a[i - 1]);
-          i--;
+        // No match found, insert persistent log at the correct chronological index
+        const pMs = parseTimestampToMs(p.timestamp);
+        const insertIndex = result.findIndex(t => parseTimestampToMs(t.timestamp) > pMs);
+        if (insertIndex !== -1) {
+          result.splice(insertIndex, 0, p);
         } else {
-          merged.push(b[j - 1]);
-          j--;
+          result.push(p);
         }
       }
     }
 
-    return merged.reverse();
+    return result;
   };
 
   const uniqueLogs = mergeLogSequences(sortedTransient, sortedPersistent)

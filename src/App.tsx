@@ -673,6 +673,9 @@ export default function App() {
           setLlmStreamingEnabled(streamingVal);
           localStorage.setItem('yuihime_llm_streaming_enabled', JSON.stringify(streamingVal));
         }
+        if (serverSettings.developer.disableUiAutoFocus !== undefined) {
+          localStorage.setItem('yuihime_disable_autofocus', JSON.stringify(!!serverSettings.developer.disableUiAutoFocus));
+        }
       }
     } catch (e) {
       console.warn("[SYSTEM] Settings sync bypass: Kernel offline.");
@@ -818,23 +821,72 @@ export default function App() {
 
     
     const handleViewportFocusReset = () => {
+      if (window.scrollX !== 0) {
+        window.scrollTo(0, window.scrollY);
+      }
+      if (document.body.scrollLeft !== 0) {
+        document.body.scrollLeft = 0;
+      }
+      if (document.documentElement.scrollLeft !== 0) {
+        document.documentElement.scrollLeft = 0;
+      }
+      const appContainer = document.getElementById('yuihime-app-container');
+      if (appContainer && appContainer.scrollLeft !== 0) {
+        appContainer.scrollLeft = 0;
+      }
+      const settingsContainer = document.getElementById('settings-scroll-container');
+      if (settingsContainer && settingsContainer.scrollLeft !== 0) {
+        settingsContainer.scrollLeft = 0;
+      }
       setTimeout(() => {
         if (window.scrollX !== 0) {
           window.scrollTo(0, window.scrollY);
         }
         document.body.scrollLeft = 0;
         document.documentElement.scrollLeft = 0;
+        const appCont = document.getElementById('yuihime-app-container');
+        if (appCont && appCont.scrollLeft !== 0) {
+          appCont.scrollLeft = 0;
+        }
+        const settingsCont = document.getElementById('settings-scroll-container');
+        if (settingsCont && settingsCont.scrollLeft !== 0) {
+          settingsCont.scrollLeft = 0;
+        }
       }, 50);
+    };
+
+    const handleScrollCapture = (e: Event) => {
+      const target = e.target as HTMLElement;
+      if (target) {
+        if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
+          return;
+        }
+        try {
+          const style = window.getComputedStyle(target);
+          const isScrollableX = style.overflowX === 'auto' || style.overflowX === 'scroll';
+          if (!isScrollableX && target.scrollLeft !== 0) {
+            target.scrollLeft = 0;
+          }
+        } catch (err) {
+          if (target.scrollLeft !== 0) {
+            target.scrollLeft = 0;
+          }
+        }
+      }
     };
 
     document.addEventListener('focusin', handleViewportFocusReset, { passive: true });
     document.addEventListener('focusout', handleViewportFocusReset, { passive: true });
     document.addEventListener('selectionchange', handleViewportFocusReset, { passive: true });
+    window.addEventListener('scroll', handleViewportFocusReset, { passive: true });
+    window.addEventListener('scroll', handleScrollCapture, { capture: true, passive: true });
 
     return () => {
       document.removeEventListener('focusin', handleViewportFocusReset);
       document.removeEventListener('focusout', handleViewportFocusReset);
       document.removeEventListener('selectionchange', handleViewportFocusReset);
+      window.removeEventListener('scroll', handleViewportFocusReset);
+      window.removeEventListener('scroll', handleScrollCapture, { capture: true });
     };
   }, []);
 
@@ -2419,7 +2471,8 @@ export default function App() {
   return (
     <BugReportBoundary>
       <div 
-        className="text-[#d4d4d8] font-sans selection:bg-amber-500/30 flex flex-col cyber-grid relative overflow-x-hidden"
+        id="yuihime-app-container"
+        className="text-[#d4d4d8] font-sans selection:bg-amber-500/30 flex flex-col cyber-grid relative overflow-hidden"
         style={{ 
           transform: 'scale(var(--ui-scale, 1))',
           transformOrigin: 'top left',
