@@ -63,6 +63,27 @@ export const ConnectionSectionTab: React.FC<ConnectionSectionTabProps> = ({
   botPairingLoading,
   botPairingMessage
 }) => {
+  const [restartLoading, setRestartLoading] = React.useState(false);
+  const [restartStatus, setRestartStatus] = React.useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  const handleRestartTelegram = async () => {
+    setRestartLoading(true);
+    setRestartStatus(null);
+    try {
+      const res = await fetch('/api/telegram/restart', { method: 'POST' });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setRestartStatus({ type: 'success', text: data.message || 'Daemon Telegram berhasil dinyalakan ulang!' });
+      } else {
+        setRestartStatus({ type: 'error', text: data.error || 'Gagal menyalakan ulang daemon Telegram.' });
+      }
+    } catch (err: any) {
+      setRestartStatus({ type: 'error', text: err.message || 'Gangguan koneksi lokal ke server.' });
+    } finally {
+      setRestartLoading(false);
+    }
+  };
+
   return (
     <div className="space-y-6 animate-fade-in">
       {/* 1. WebSocket Controller & Diagnostic Panel */}
@@ -427,6 +448,59 @@ export const ConnectionSectionTab: React.FC<ConnectionSectionTabProps> = ({
             )}
           </div>
         </div>
+      </div>
+
+      {/* 4. Telegram Bot Daemon Controller */}
+      <div className="bg-[#0e0e14]/55 border border-white/5 p-6 rounded-2xl space-y-4 font-sans relative overflow-hidden">
+        <div className="absolute -top-12 -right-12 w-32 h-32 bg-amber-500/5 blur-[50px] rounded-full pointer-events-none" />
+        
+        <div className="flex items-center justify-between border-b border-white/5 pb-4">
+          <div>
+            <h4 className="text-[10px] uppercase font-mono tracking-widest text-amber-500 font-bold">Telegram Daemon Controller</h4>
+            <p className="text-[10px] text-zinc-500 font-sans mt-0.5">
+              Jalankan ulang atau paksa sirkuit koneksi daemon Bot Telegram batiniah jika sewaktu-waktu terputus secara sepihak.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-1">
+          <div className="text-[11px] text-zinc-400 font-sans max-w-md leading-relaxed">
+            Jika bot Telegram Anda mengalami kendala koneksi atau berhenti merespons tiba-tiba tanpa sebab, Anda dapat memicu penyalaan ulang daemon (*bot reboot*) secara aman dari sini tanpa perlu menghentikan sistem inti YuiHime.
+          </div>
+          
+          <button
+            type="button"
+            onClick={handleRestartTelegram}
+            disabled={restartLoading}
+            className={`px-5 py-3 text-xs font-semibold rounded-xl border font-sans transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-2 ${
+              restartLoading
+                ? 'bg-zinc-800/40 text-zinc-500 border-zinc-800 cursor-not-allowed'
+                : 'bg-amber-500/10 border-amber-500/20 text-amber-400 hover:bg-amber-500/20 hover:border-amber-500/30'
+            }`}
+          >
+            {restartLoading ? (
+              <>
+                <span className="w-3.5 h-3.5 border-2 border-amber-400/20 border-t-amber-400 rounded-full animate-spin" />
+                <span>Memuat Ulang...</span>
+              </>
+            ) : (
+              <>
+                <span>🔄 Restart Telegram Daemon</span>
+              </>
+            )}
+          </button>
+        </div>
+
+        {restartStatus && (
+          <div className={`text-[11px] p-2.5 px-3.5 rounded-xl border ${
+            restartStatus.type === 'success'
+              ? 'bg-emerald-500/5 border-emerald-500/10 text-emerald-400'
+              : 'bg-rose-500/5 border-rose-500/10 text-rose-400'
+          }`}>
+            {restartStatus.type === 'success' ? '✅ ' : '❌ '}
+            {restartStatus.text}
+          </div>
+        )}
       </div>
     </div>
   );

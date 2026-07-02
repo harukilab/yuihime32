@@ -7,6 +7,10 @@ Dokumen ini memuat daftar lengkap dari seluruh modul kognitif, *add-ons*, jembat
 ## ⏳ Sejarah Pembaruan Modul
 *Dokumen ini wajib diperbarui setiap kali terjadi pembuatan, pemindahan, atau modifikasi fungsionalitas modul.*
 
+- **2026-07-02 (v3.14)**: **Penyatuan Resolusi Path Sistem (`resolveSystemRootPath`)**:
+  - Membuat utilitas terpadu `resolveSystemRootPath` dalam `apiRouter.ts` untuk memproses seluruh manipulasi path yang berkaitan dengan `YUIHIME_SYSTEM_ROOT` (atau `apiCustomSystemRoot`).
+  - Mengganti logika pembatasan path hardcoded pada tools seperti `write`, `read`, `download`, dan `send` di `toolsRouter.ts` dengan utilitas anyar ini guna menghindari bug "access denied" saat melakukan operasi berkas di luar konteks repositori ketika diizinkan sistem.
+
 - **2026-06-29 (v3.10)**: **Penyelarasan Mode Berpikir Cepat & Parallel Tool Engine**:
   - **Bypass KERNEL_FAIL_SAFE**: Menyetel `isIntentionalEmpty = true` sehingga respons kosong atau pendek (< 5 karakter) tidak lagi memicu LLM reprocessing fallback atau dialog galat darurat, memberikan ruang bagi Yui untuk merespons mandiri via tools (seperti `send_update`/messaging tools).
   - **Parallel Executions**: Mengubah Mode Berpikir Cepat agar tidak membatasi iterasi (tetap berjalan maksimal 3 iterasi) namun melakukan perombakan performa ekstrem dengan menggerakkan seluruh tool calls secara paralel menggunakan `Promise.all` daripada sekuensial.

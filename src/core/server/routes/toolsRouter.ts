@@ -5,10 +5,26 @@ import { existsSync, readdirSync, statSync, realpathSync, mkdirSync } from "fs";
 import { exec } from "child_process";
 import { promisify } from "util";
 import { AIService } from "../../kernel/ai.js";
-import { apiCustomSystemRoot, verifySandboxPath, getDynamicSandboxRoot } from "../apiRouter.js";
+import { SettingsManager } from "../../kernel/settings.js";
+import { apiCustomSystemRoot, verifySandboxPath, getDynamicSandboxRoot, resolveSystemRootPath } from "../apiRouter.js";
 import { CustomToolsLoader } from "../../CustomToolsLoader.js";
 
 const execPromise = promisify(exec);
+
+function getCleanRelativePath(filename: string): string {
+  const cwd = process.cwd();
+  let cleaned = filename;
+  if (path.isAbsolute(cleaned)) {
+    if (cleaned.startsWith(cwd)) {
+      cleaned = path.relative(cwd, cleaned) || ".";
+    } else if (cleaned.startsWith('/app/')) {
+      cleaned = cleaned.substring('/app/'.length);
+    } else if (cleaned === '/app') {
+      cleaned = ".";
+    }
+  }
+  return cleaned;
+}
 
 export function registerToolsRoutes(app: express.Express, db: any) {
   app.get("/api/tools/search", async (req, res) => {
@@ -182,16 +198,21 @@ export function registerToolsRoutes(app: express.Express, db: any) {
     if (!command) return res.status(400).json({ error: "No command provided" });
     
     try {
-      const isYolo = process.env.YUIHIME_SHELL_YOLO === "true";
+      const settings = SettingsManager.getInstance().getAll();
+      const isYolo = process.env.YUIHIME_YOLO_MODE === "true" ||
+                     process.env.YUIHIME_SANDBOX_YOLO === "true" ||
+                     process.env.YUIHIME_SHELL_YOLO === "true" ||
+                     settings.sandbox_paths?.yolo_mode === true;
       const restricted = ["rm -rf /", "mkfs", "dd"];
       if (!isYolo && restricted.some(r => command.includes(r))) {
         return res.status(403).json({ error: "Command restricted for safety." });
       }
 
       const sandboxDir = getDynamicSandboxRoot();
-      await fs.mkdir(sandboxDir, { recursive: true });
+      const workingDir = isYolo ? process.cwd() : sandboxDir;
+      await fs.mkdir(workingDir, { recursive: true });
 
-      const { stdout, stderr } = await execPromise(command, { cwd: sandboxDir, timeout: 10000 });
+      const { stdout, stderr } = await execPromise(command, { cwd: workingDir, timeout: 10000 });
       res.json({ stdout, stderr });
     } catch (error: any) {
       res.status(500).json({ error: error.message, stderr: error.stderr });
@@ -203,14 +224,7 @@ export function registerToolsRoutes(app: express.Express, db: any) {
     if (!filename) return res.status(400).json({ error: "No filename provided" });
 
     try {
-      const sandboxDir = getDynamicSandboxRoot();
-      await fs.mkdir(sandboxDir, { recursive: true });
-      
-      const safePath = path.resolve(sandboxDir, filename);
-      if (!safePath.startsWith(sandboxDir)) {
-        return res.status(403).json({ error: "Access denied. Paths must remain inside the user_data sandbox." });
-      }
-
+      const safePath = resolveSystemRootPath(filename, 'write');
       await fs.mkdir(path.dirname(safePath), { recursive: true });
       await fs.writeFile(safePath, content || "");
       res.json({ success: true, path: safePath });
@@ -224,12 +238,7 @@ export function registerToolsRoutes(app: express.Express, db: any) {
     if (!filename) return res.status(400).json({ error: "No filename provided" });
 
     try {
-      const sandboxDir = getDynamicSandboxRoot();
-      const safePath = path.resolve(sandboxDir, filename as string);
-      if (!safePath.startsWith(sandboxDir)) {
-        return res.status(403).json({ error: "Access denied. Paths must remain inside the user_data sandbox." });
-      }
-
+      const safePath = resolveSystemRootPath(filename as string, 'read');
       const content = await fs.readFile(safePath, "utf-8");
       res.json({ content });
     } catch (error: any) {
@@ -267,9 +276,6 @@ export function registerToolsRoutes(app: express.Express, db: any) {
     if (!url) return res.status(400).json({ error: "No URL provided" });
 
     try {
-      const sandboxDir = getDynamicSandboxRoot();
-      await fs.mkdir(sandboxDir, { recursive: true });
-
       const fetchResponse = await fetch(url);
       if (!fetchResponse.ok) {
         return res.status(500).json({ error: `Failed to fetch URL. Status code: ${fetchResponse.status}` });
@@ -292,10 +298,7 @@ export function registerToolsRoutes(app: express.Express, db: any) {
         }
       }
 
-      const safePath = path.resolve(sandboxDir, finalName);
-      if (!safePath.startsWith(sandboxDir)) {
-        return res.status(403).json({ error: "Access denied. Paths must remain inside the user_data sandbox." });
-      }
+      const safePath = resolveSystemRootPath(finalName, 'write');
 
       const arrayBuffer = await fetchResponse.arrayBuffer();
       const buffer = Buffer.from(arrayBuffer);
@@ -305,9 +308,9 @@ export function registerToolsRoutes(app: express.Express, db: any) {
 
       res.json({
         success: true,
-        filename: finalName,
+        filename: path.basename(safePath),
         size: buffer.length,
-        message: `Successfully downloaded and saved file as "${finalName}" (${buffer.length} bytes)`
+        message: `Successfully downloaded and saved file as "${path.basename(safePath)}" (${buffer.length} bytes)`
       });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
@@ -319,14 +322,10 @@ export function registerToolsRoutes(app: express.Express, db: any) {
     if (!filename) return res.status(400).json({ error: "No filename provided" });
 
     try {
-      const sandboxDir = getDynamicSandboxRoot();
-      const safePath = path.resolve(sandboxDir, filename);
-      if (!safePath.startsWith(sandboxDir)) {
-        return res.status(403).json({ error: "Access denied. Paths must remain inside the user_data sandbox." });
-      }
+      const safePath = resolveSystemRootPath(filename, 'read');
 
       if (!existsSync(safePath)) {
-        return res.status(404).json({ error: `File "${filename}" not found in sandbox.` });
+        return res.status(404).json({ error: `File "${filename}" not found.` });
       }
 
       let sent = false;

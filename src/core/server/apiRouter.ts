@@ -1,6 +1,7 @@
 import express from "express";
 import { WebSocket } from "ws";
 import path from "path";
+import os from "os";
 import fs from "fs/promises";
 import { existsSync, mkdirSync, writeFileSync, readFileSync, readdirSync, statSync, rmSync, unlinkSync, realpathSync, renameSync } from "fs";
 import { exec } from "child_process";
@@ -187,8 +188,26 @@ export const getCronAction = (id: string, name: string, repeating: boolean, db: 
 };
 
 // --- Configuration & Sandbox Settings ---
-const apiRootEnvStr = process.env.YUIHIME_SYSTEM_ROOT || process.env.YUIHIME_ROOT || ".yuihime";
-export const apiCustomSystemRoot = path.isAbsolute(apiRootEnvStr) ? apiRootEnvStr : path.join(process.cwd(), apiRootEnvStr);
+const getSystemRoot = () => {
+  let apiRootEnvStr = process.env.YUIHIME_SYSTEM_ROOT || process.env.YUIHIME_ROOT || ".yuihime";
+  
+  // Resolve standard env vars and shortcuts if shell passed them raw or they were manually configured
+  if (apiRootEnvStr.startsWith('~')) {
+    apiRootEnvStr = path.join(os.homedir(), apiRootEnvStr.substring(1));
+  } else if (apiRootEnvStr.includes('$HOME')) {
+    apiRootEnvStr = apiRootEnvStr.replace(/\$HOME/g, os.homedir());
+  } else if (apiRootEnvStr.includes('$home')) {
+    apiRootEnvStr = apiRootEnvStr.replace(/\$home/g, os.homedir());
+  } else if (apiRootEnvStr.includes('%USERPROFILE%')) {
+    apiRootEnvStr = apiRootEnvStr.replace(/%USERPROFILE%/g, os.homedir());
+  }
+  
+  // Remove possible literal double or single quotes surrounding the path from shell aliases
+  apiRootEnvStr = apiRootEnvStr.replace(/^['"]|['"]$/g, '');
+
+  return path.isAbsolute(apiRootEnvStr) ? apiRootEnvStr : path.join(process.cwd(), apiRootEnvStr);
+};
+export const apiCustomSystemRoot = getSystemRoot();
 
 export let systemConfig: any = {
   sandbox: {
@@ -227,6 +246,18 @@ export const getDynamicSandboxRoot = () => {
   }
 
   if (rawPath) {
+    // Resolve shortcuts and clean quotes
+    if (rawPath.startsWith('~')) {
+      rawPath = path.join(os.homedir(), rawPath.substring(1));
+    } else if (rawPath.includes('$HOME')) {
+      rawPath = rawPath.replace(/\$HOME/g, os.homedir());
+    } else if (rawPath.includes('$home')) {
+      rawPath = rawPath.replace(/\$home/g, os.homedir());
+    } else if (rawPath.includes('%USERPROFILE%')) {
+      rawPath = rawPath.replace(/%USERPROFILE%/g, os.homedir());
+    }
+    rawPath = rawPath.replace(/^['"]|['"]$/g, '');
+
     if (path.isAbsolute(rawPath)) {
       return path.resolve(rawPath);
     }
@@ -251,13 +282,31 @@ export const verifySandboxPath = (targetPath: string, action?: string, confirmed
     throw new Error("SECURITY_ALERT: Null Byte injection detected.");
   }
 
-  const isYolo = process.env.YUIHIME_SANDBOX_YOLO === "true" || process.env.YUIHIME_SHELL_YOLO === "true";
+  const settings = SettingsManager.getInstance().getAll();
+  const isYolo = process.env.YUIHIME_YOLO_MODE === "true" ||
+                 process.env.YUIHIME_SANDBOX_YOLO === "true" ||
+                 process.env.YUIHIME_SHELL_YOLO === "true" ||
+                 settings.sandbox_paths?.yolo_mode === true;
   if (isYolo) {
     // Stage 2 when YOLO is ON: allow everything "all in os" - resolve relative to system cwd
     return path.resolve(process.cwd(), targetPath);
   }
 
-  const normalized = targetPath.replace(/\\/g, '/').toLowerCase();
+  // Pre-process absolute workspace paths (like process.cwd() or /app) into relative sandbox paths
+  let cleanedPath = targetPath;
+  const cwd = process.cwd();
+  
+  if (path.isAbsolute(cleanedPath)) {
+    if (cleanedPath.startsWith(cwd)) {
+      cleanedPath = path.relative(cwd, cleanedPath) || ".";
+    } else if (cleanedPath.startsWith('/app/')) {
+      cleanedPath = cleanedPath.substring('/app/'.length);
+    } else if (cleanedPath === '/app') {
+      cleanedPath = ".";
+    }
+  }
+
+  const normalized = cleanedPath.replace(/\\/g, '/').toLowerCase();
   const parts = normalized.split('/');
   if (parts.some(part => part.startsWith('.') && part !== '.' && part !== '..')) {
     throw new Error("SECURITY_ALERT: Interacting with sensitive dotfiles or system configuration directories is forbidden.");
@@ -267,14 +316,14 @@ export const verifySandboxPath = (targetPath: string, action?: string, confirmed
 
   // Stage 1 (Primary / Utama Prioritas): Jail within .yuihime or dynamicSandboxRoot
   let resolvedPath: string;
-  if (path.isAbsolute(targetPath)) {
-    resolvedPath = path.resolve(targetPath);
-  } else if (targetPath.startsWith('user_data/') || targetPath.startsWith('./user_data/')) {
-    const cleanRel = targetPath.startsWith('./') ? targetPath.substring(2) : targetPath;
+  if (path.isAbsolute(cleanedPath)) {
+    resolvedPath = path.resolve(cleanedPath);
+  } else if (cleanedPath.startsWith('user_data/') || cleanedPath.startsWith('./user_data/')) {
+    const cleanRel = cleanedPath.startsWith('./') ? cleanedPath.substring(2) : cleanedPath;
     const subPath = cleanRel.substring('user_data/'.length);
     resolvedPath = path.resolve(dynamicSandboxRoot, subPath);
   } else {
-    resolvedPath = path.resolve(apiCustomSystemRoot, targetPath);
+    resolvedPath = path.resolve(apiCustomSystemRoot, cleanedPath);
   }
 
   if (!resolvedPath.startsWith(apiCustomSystemRoot) && !resolvedPath.startsWith(dynamicSandboxRoot)) {
@@ -305,6 +354,14 @@ export const verifySandboxPath = (targetPath: string, action?: string, confirmed
   }
 
   return resolvedPath;
+};
+
+/**
+ * Resolves a target path against the YUIHIME_SYSTEM_ROOT environment variable (apiCustomSystemRoot)
+ * or the user_data sandbox directory, validating security boundaries and avoiding path escape risks.
+ */
+export const resolveSystemRootPath = (targetPath: string, action?: string, confirmed?: boolean): string => {
+  return verifySandboxPath(targetPath, action, confirmed);
 };
 
 // --- API Router Registration ---

@@ -455,19 +455,33 @@ export async function initializeBot(activeDb?: any, force = false, dropPending =
             activeTelegramToken = null;
           }
         }
-      } else if (err.code === 'ETIMEDOUT' || err.code === 'ECONNREFUSED' || err.code === 'ENOTFOUND' || (err.message && err.message.includes('timeout'))) {
+      } else if (
+        err.code === 'ETIMEDOUT' ||
+        err.code === 'ECONNREFUSED' ||
+        err.code === 'ENOTFOUND' ||
+        err.code === 'EAI_AGAIN' ||
+        err.code === 'EADDRNOTAVAIL' ||
+        err.code === 'ECONNRESET' ||
+        err.code === 'ENETUNREACH' ||
+        err.code === 'EHOSTUNREACH' ||
+        (err.message && (
+          err.message.toLowerCase().includes('timeout') ||
+          err.message.toLowerCase().includes('eai_again') ||
+          err.message.toLowerCase().includes('getaddrinfo')
+        ))
+      ) {
         // NOTICE:
-        // Network timeout during initial bot launch (ETIMEDOUT, ECONNREFUSED, ENOTFOUND, DNS timeout).
+        // Network timeout/DNS failure during initial bot launch (ETIMEDOUT, ECONNREFUSED, ENOTFOUND, EAI_AGAIN).
         // This occurs when Telegram API is temporarily unreachable or network connection is unstable.
-        // Root cause: Network latency, firewall/proxy issues, or Telegram API service degradation.
+        // Root cause: Network latency, firewall/proxy issues, DNS lookup issues or Telegram API service degradation.
         // We retry with exponential backoff (cap: 3 retries) to handle transient network issues.
         const maxNetworkRetries = 3;
         if (retryCount < maxNetworkRetries) {
           const delay = 5000 + (retryCount * 3000) + Math.random() * 2000;
-          console.warn(`[TELEGRAM] Network timeout/connection error on launch (${err.code}). Retrying in ${Math.round(delay/1000)}s (Attempt ${retryCount + 1}/${maxNetworkRetries})...`);
+          console.warn(`[TELEGRAM] Network timeout/connection error on launch (${err.code || 'EAI_AGAIN'}). Retrying in ${Math.round(delay/1000)}s (Attempt ${retryCount + 1}/${maxNetworkRetries})...`);
           setTimeout(() => launchBot(retryCount + 1), delay);
         } else {
-          console.error(`[TELEGRAM] Gagal meluncurkan Bot Daemon setelah ${maxNetworkRetries} percobaan ulang untuk network errors. Error: ${err.message || err.code}. Bot akan tetap dinonaktifkan hingga sistem boot ulang atau konfigurasi diubah.`);
+          console.error(`[TELEGRAM] Gagal meluncurkan Bot Daemon setelah ${maxNetworkRetries} percobaan ulang untuk network/DNS errors. Error: ${err.message || err.code}. Bot akan tetap dinonaktifkan hingga sistem boot ulang atau konfigurasi diubah.`);
           try { bot.stop(); } catch (e) {}
           if (activeTelegramBot === bot) {
             activeTelegramBot = null;

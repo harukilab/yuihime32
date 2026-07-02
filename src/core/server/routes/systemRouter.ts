@@ -121,6 +121,17 @@ async function discoverAddons() {
 
 // --- Dynamic Connections & Broadcast Helpers ---
 export function registerSystemRoutes(app: express.Express, db: any) {
+  app.post("/api/telegram/restart", async (req, res) => {
+    try {
+      const { initializeBot } = await import("../telegram.js");
+      await initializeBot(db, true);
+      res.json({ success: true, message: "Bot Telegram berhasil dimuat ulang dan dijalankan kembali secara batiniah!" });
+    } catch (err: any) {
+      console.error("[API_TELEGRAM_RESTART] Gagal memuat ulang bot:", err);
+      res.status(500).json({ error: err.message || "Gagal memuat ulang Bot Telegram" });
+    }
+  });
+
   app.get("/api/settings", async (req, res) => {
     const settingsInstance = SettingsManager.getInstance();
     const sets = await settingsInstance.load();

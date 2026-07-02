@@ -1323,11 +1323,15 @@ export const ModularSettings: React.FC<ModularSettingsProps> = ({
         user_data_path: './user_data',
         agent_path: './agent',
         addons_path: './addons',
-        auto_acc_user_data: false
+        auto_acc_user_data: false,
+        yolo_mode: false
       };
     } else {
       if (initializedSettings.sandbox_paths.auto_acc_user_data === undefined) {
         initializedSettings.sandbox_paths.auto_acc_user_data = false;
+      }
+      if (initializedSettings.sandbox_paths.yolo_mode === undefined) {
+        initializedSettings.sandbox_paths.yolo_mode = false;
       }
     }
     if (!initializedSettings.developer) {

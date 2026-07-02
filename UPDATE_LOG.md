@@ -1,6 +1,31 @@
 # YuiHime Project Updates Logs
 ---
 
+## [3.14] - 2026-07-02
+### Added & Improved
+- **Penyatuan Resolusi Path Sistem (`resolveSystemRootPath`)**:
+  - Membuat fungsi utilitas `resolveSystemRootPath` baru di dalam `apiRouter.ts` untuk memusatkan resolusi path terhadap variabel lingkungan `YUIHIME_SYSTEM_ROOT` (melalui `apiCustomSystemRoot`) dan `user_data` sandbox.
+  - Mengintegrasikan utilitas baru ini pada seluruh endpoint file di `toolsRouter.ts` seperti write (`/api/tools/files/write`), read (`/api/tools/files/read`), download (`/api/tools/files/download`), dan send (`/api/tools/files/send`).
+  - Mencegah timbulnya kesalahan "access denied" saat melakukan baca/tulis di luar workspace ketika batasan sistem atau mode YOLO diizinkan.
+
+## [3.13] - 2026-07-02
+### Fixed & Improved
+- **Perbaikan Path Jail & Resolusi Path Absolut Workspace Sandbox**:
+  - Menyelesaikan bug "Access Denied" pada mekanisme pembatasan ruang kerja (Path Jail / Sandbox) ketika file ditulis menggunakan path absolut lengkap (seperti `/app/tiktok_references.txt` di AI Studio atau `/home/.../yuihime32/tiktok_references.txt` di mesin lokal).
+  - Mengimplementasikan pembersihan dan konversi path absolut di bawah direktori kerja (repository root / `process.cwd()`) dan default workspace `/app/` secara otomatis menjadi path relatif agar tetap dapat dimasukkan ke dalam sandbox secara aman.
+  - Memperkokoh inisialisasi konstanta root sistem (`apiCustomSystemRoot` & `getDynamicSandboxRoot`) agar secara dinamis dapat membaca, memotong tanda kutip shell (`'` / `"`), dan mengekspansi pintasan penunjuk direktori rumah (`~`, `$HOME`, `%USERPROFILE%`) ke `os.homedir()` jika didefinisikan melalui alias terminal atau variabel lingkungan mentah.
+
+## [3.12] - 2026-07-02
+### Fixed & Improved
+- **Ketahanan Jaringan & Resolusi DNS Telegram Bot Daemon**:
+  - Menyelesaikan masalah di mana kegagalan DNS atau batas waktu jaringan (`EAI_AGAIN`, `ETIMEDOUT`, `ENOTFOUND`, dll.) saat menginisialisasi atau meluncurkan daemon Telegram Bot akan memicu kesalahan fatal yang tidak ditangani secara berkala.
+  - Memasukkan kode-kode kesalahan transient seperti `EAI_AGAIN`, `EADDRNOTAVAIL`, `ECONNRESET`, `ENETUNREACH`, dan `EHOSTUNREACH` ke dalam blok penanganan dan pencobaan ulang (*retry system*).
+  - Mengonfigurasi penanganan kesalahan agar otomatis melakukan pencobaan ulang dengan *exponential backoff* hingga batas maksimum 3 kali sebelum menonaktifkan bot secara anggun jika koneksi publik memang sepenuhnya tidak tersedia, guna mencegah kegagalan atau hambatan berlebih pada proses inisialisasi server.
+- **Implementasi Fitur Manual Reboot / Restart Daemon Telegram Bot**:
+  - Menyediakan endpoint API khusus `/api/telegram/restart` di backend `systemRouter.ts` untuk memicu pemuatan ulang (*hot-reload*) daemon Telegram Bot secara langsung tanpa mengganggu runtime Express / Node server secara keseluruhan.
+  - Mengintegrasikan antarmuka UI interaktif **"Telegram Daemon Controller"** di bawah tab koneksi (`ConnectionSectionTab.tsx`) di panel admin/Modular Settings.
+  - Menyertakan indikator status pengiriman, *loading state*, serta status balasan sukses/gagal secara visual untuk memastikan transparansi diagnostik batiniah bot.
+
 ## [3.11] - 2026-06-30
 ### Fixed & Improved
 - **Resolusi Unresponsive `manage_cron` Tool**:

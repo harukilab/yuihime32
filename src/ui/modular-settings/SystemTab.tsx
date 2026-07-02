@@ -1713,6 +1713,34 @@ export const SystemTab: React.FC<SystemTabProps> = ({
                   />
                 </button>
               </div>
+
+              <div className="md:col-span-2 bg-[#09090e]/75 border border-white/5 rounded-xl p-4 flex items-center justify-between mt-2 select-none">
+                <div className="pr-4">
+                  <label className="block text-[11px] text-amber-500 font-sans font-bold">YOLO Mode (Total Sandbox & Shell Bypass)</label>
+                  <p className="text-[10px] text-zinc-500 font-sans mt-0.5 leading-relaxed">
+                    Jika diaktifkan, membebaskan Yuihime dari karantina isolasi batin "Path Jail" (bebas menulis/membaca berkas di manapun di bawah repository root) dan membebaskan eksekusi perintah shell CLI seutuhnya dari daftar hitam pembatasan.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSettings((prev: any) => ({
+                    ...prev,
+                    sandbox_paths: {
+                      ...(prev.sandbox_paths || {}),
+                      yolo_mode: !prev.sandbox_paths?.yolo_mode
+                    }
+                  }))}
+                  className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                    settings.sandbox_paths?.yolo_mode ? 'bg-amber-500' : 'bg-zinc-700'
+                  }`}
+                >
+                  <span
+                    className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-black shadow ring-0 transition duration-200 ease-in-out ${
+                      settings.sandbox_paths?.yolo_mode ? 'translate-x-4 bg-white' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
+              </div>
             </div>
             <div className="bg-amber-500/5 rounded-xl border border-amber-500/10 p-4 select-none">
               <p className="text-[10px] text-amber-500/90 leading-relaxed font-sans">

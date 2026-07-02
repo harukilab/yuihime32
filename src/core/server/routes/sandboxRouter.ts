@@ -60,7 +60,11 @@ export function registerSandboxRoutes(app: express.Express, db: any) {
     const { command } = req.body;
     if (!command) return res.status(400).json({ error: "No command provided" });
     
-    const isYolo = process.env.YUIHIME_SANDBOX_YOLO === "true" || process.env.YUIHIME_SHELL_YOLO === "true";
+    const settings = SettingsManager.getInstance().getAll();
+    const isYolo = process.env.YUIHIME_YOLO_MODE === "true" ||
+                   process.env.YUIHIME_SANDBOX_YOLO === "true" ||
+                   process.env.YUIHIME_SHELL_YOLO === "true" ||
+                   settings.sandbox_paths?.yolo_mode === true;
     if (!isYolo && sandboxCfg.commandBlacklist.some((b: string) => command.includes(b))) {
        return res.status(403).json({ error: "Command blocked by security sandbox." });
     }
