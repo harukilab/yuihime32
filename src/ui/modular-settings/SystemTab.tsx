@@ -1685,6 +1685,23 @@ export const SystemTab: React.FC<SystemTabProps> = ({
                   className="w-full bg-[#07070a] border border-white/5 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-amber-500/35 font-mono transition-all"
                 />
               </div>
+              <div>
+                <label className="block text-[10.5px] text-zinc-400 mb-1.5 font-sans font-bold">Waktu Tunggu Konfirmasi (Detik)</label>
+                <input 
+                  type="number" 
+                  min={5}
+                  max={600}
+                  value={settings.sandbox_paths?.confirmation_timeout ?? 45}
+                  onChange={e => {
+                    const val = parseInt(e.target.value, 10);
+                    setSettings((prev: any) => ({
+                      ...prev,
+                      sandbox_paths: { ...(prev.sandbox_paths || {}), confirmation_timeout: isNaN(val) ? 45 : val }
+                    }));
+                  }}
+                  className="w-full bg-[#07070a] border border-white/5 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-amber-500/35 font-mono transition-all"
+                />
+              </div>
 
               <div className="md:col-span-2 bg-[#09090e]/75 border border-white/5 rounded-xl p-4 flex items-center justify-between mt-2 select-none">
                 <div className="pr-4">
@@ -1714,32 +1731,97 @@ export const SystemTab: React.FC<SystemTabProps> = ({
                 </button>
               </div>
 
-              <div className="md:col-span-2 bg-[#09090e]/75 border border-white/5 rounded-xl p-4 flex items-center justify-between mt-2 select-none">
-                <div className="pr-4">
+              <div className="md:col-span-2 bg-[#09090e]/75 border border-white/5 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between mt-2 select-none gap-4">
+                <div className="pr-4 max-w-xl">
                   <label className="block text-[11px] text-amber-500 font-sans font-bold">YOLO Mode (Total Sandbox & Shell Bypass)</label>
                   <p className="text-[10px] text-zinc-500 font-sans mt-0.5 leading-relaxed">
-                    Jika diaktifkan, membebaskan Yuihime dari karantina isolasi batin "Path Jail" (bebas menulis/membaca berkas di manapun di bawah repository root) dan membebaskan eksekusi perintah shell CLI seutuhnya dari daftar hitam pembatasan.
+                    Tingkat batasan batin Yuihime terhadap sistem operasi dan file:<br />
+                    • <strong className="text-zinc-300">OFF:</strong> Sangat ketat. Hanya membaca/menulis di dalam <code>user_data</code> sandbox saja.<br />
+                    • <strong className="text-amber-500">HALF:</strong> Hanya CLI Shell yang dibatasi (blacklist). Bebas membaca/menulis file di manapun di luar sandbox, namun setiap penulisan/modifikasi file di luar folder sistem wajib konfirmasi (ditampilkan target path dan tindakannya) kecuali jika terdaftar di whitelist.<br />
+                    • <strong className="text-red-400 font-bold">FULL:</strong> Bebas sepenuhnya tanpa batasan dan tanpa konfirmasi.
                   </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setSettings((prev: any) => ({
+                <div className="flex bg-[#050508] border border-white/5 rounded-xl p-1 gap-1">
+                  {['off', 'half', 'full'].map((mode) => {
+                    const currentVal = settings.sandbox_paths?.yolo_mode;
+                    const isSelected = 
+                      (mode === 'full' && (currentVal === 'full' || currentVal === true)) ||
+                      (mode === 'half' && currentVal === 'half') ||
+                      (mode === 'off' && (currentVal === 'off' || currentVal === false || currentVal === undefined));
+
+                    return (
+                      <button
+                        key={mode}
+                        type="button"
+                        onClick={() => setSettings((prev: any) => ({
+                          ...prev,
+                          sandbox_paths: {
+                            ...(prev.sandbox_paths || {}),
+                            yolo_mode: mode
+                          }
+                        }))}
+                        className={`px-3 py-1.5 rounded-lg text-[10px] font-mono uppercase tracking-wider transition-all ${
+                          isSelected 
+                            ? 'bg-amber-500 text-black font-bold' 
+                            : 'text-zinc-400 hover:text-white hover:bg-white/5'
+                        }`}
+                      >
+                        {mode}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="block text-[10.5px] text-zinc-400 mb-1.5 font-sans font-bold">YOLO Half Mode Whitelist</label>
+                <input 
+                  type="text" 
+                  placeholder="e.g. src/drivers, package.json (comma-separated)"
+                  value={settings.sandbox_paths?.whitelist || ''}
+                  onChange={e => setSettings((prev: any) => ({
                     ...prev,
-                    sandbox_paths: {
-                      ...(prev.sandbox_paths || {}),
-                      yolo_mode: !prev.sandbox_paths?.yolo_mode
-                    }
+                    sandbox_paths: { ...(prev.sandbox_paths || {}), whitelist: e.target.value }
                   }))}
-                  className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                    settings.sandbox_paths?.yolo_mode ? 'bg-amber-500' : 'bg-zinc-700'
-                  }`}
-                >
-                  <span
-                    className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-black shadow ring-0 transition duration-200 ease-in-out ${
-                      settings.sandbox_paths?.yolo_mode ? 'translate-x-4 bg-white' : 'translate-x-0'
-                    }`}
-                  />
-                </button>
+                  className="w-full bg-[#07070a] border border-white/5 rounded-xl px-3 py-2.5 text-xs text-white placeholder-zinc-750 focus:outline-none focus:border-amber-500/35 font-mono transition-all"
+                />
+                <p className="text-[9px] text-zinc-550 font-sans mt-1 leading-relaxed">
+                  Daftar nama file atau direktori relatif (pisahkan dengan koma) yang diizinkan untuk langsung dimodifikasi pada mode YOLO HALF tanpa perlu memicu dialog konfirmasi manual.
+                </p>
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="block text-[10.5px] text-zinc-400 mb-1.5 font-sans font-bold">Shell Command Blacklist</label>
+                <input 
+                  type="text" 
+                  placeholder="e.g. rm -rf /, mkfs, dd, reboot, shutdown (comma-separated)"
+                  value={settings.sandbox_paths?.command_blacklist || ''}
+                  onChange={e => setSettings((prev: any) => ({
+                    ...prev,
+                    sandbox_paths: { ...(prev.sandbox_paths || {}), command_blacklist: e.target.value }
+                  }))}
+                  className="w-full bg-[#07070a] border border-white/5 rounded-xl px-3 py-2.5 text-xs text-white placeholder-zinc-750 focus:outline-none focus:border-amber-500/35 font-mono transition-all"
+                />
+                <p className="text-[9px] text-zinc-550 font-sans mt-1 leading-relaxed">
+                  Daftar pola perintah shell (pisahkan dengan koma) yang dilarang keras untuk dieksekusi demi pengamanan sistem (kecuali pada mode YOLO FULL).
+                </p>
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="block text-[10.5px] text-zinc-400 mb-1.5 font-sans font-bold">Shell Command Whitelist</label>
+                <input 
+                  type="text" 
+                  placeholder="e.g. echo, ls, pwd (comma-separated)"
+                  value={settings.sandbox_paths?.command_whitelist || ''}
+                  onChange={e => setSettings((prev: any) => ({
+                    ...prev,
+                    sandbox_paths: { ...(prev.sandbox_paths || {}), command_whitelist: e.target.value }
+                  }))}
+                  className="w-full bg-[#07070a] border border-white/5 rounded-xl px-3 py-2.5 text-xs text-white placeholder-zinc-750 focus:outline-none focus:border-amber-500/35 font-mono transition-all"
+                />
+                <p className="text-[9px] text-zinc-550 font-sans mt-1 leading-relaxed">
+                  Daftar pola perintah shell (pisahkan dengan koma) yang diizinkan untuk melewati filter blacklist di atas.
+                </p>
               </div>
             </div>
             <div className="bg-amber-500/5 rounded-xl border border-amber-500/10 p-4 select-none">
@@ -1762,6 +1844,18 @@ export const SystemTab: React.FC<SystemTabProps> = ({
                       type: 'boolean', 
                       default: true,
                       description: 'Mengaktifkan putaran analisis multi-langkah batin untuk alat bantu (tools). Jika dimatikan, respons akan langsung dihasilkan dalam satu langkah cepat untuk performa maksimal.' 
+                    },
+                    maxLoops: {
+                      label: 'Maximum Loops (Manual Limit)',
+                      type: 'number',
+                      default: 3,
+                      description: 'Batas putaran pemikiran (loop) maksimal yang diizinkan untuk eksekusi tools dalam satu turn. Default: 3.'
+                    },
+                    unlimitedLoops: {
+                      label: 'Unlimited Loops (Opsi Tanpa Batas)',
+                      type: 'boolean',
+                      default: false,
+                      description: 'Mengaktifkan putaran analisis batin tanpa batas (unlimited). Gunakan dengan sangat hati-hati karena dapat menghabiskan kuota token Anda!'
                     },
                     disableStageTransitions: { label: 'Deactivate Animation Transitions', type: 'boolean', default: false },
                     enableKernelFailsafe: { label: 'Enable Kernel Failsafe (LLM Reprocessing Retry)', type: 'boolean', default: false },
@@ -1790,6 +1884,8 @@ export const SystemTab: React.FC<SystemTabProps> = ({
               } as any,
               settings.developer || {
                 enableMultiTurnReasoning: true,
+                maxLoops: 3,
+                unlimitedLoops: false,
                 disableStageTransitions: false,
                 enableKernelFailsafe: false,
                 pageSpecificTransitions: true,

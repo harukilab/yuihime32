@@ -6,7 +6,7 @@ import { promisify } from "util";
 import * as toml from "smol-toml";
 import { AIService } from "../../kernel/ai.js";
 import { SettingsManager } from "../../kernel/settings.js";
-import { verifySandboxPath, SANDBOX_ROOT, sandboxCfg, systemConfig, getDynamicSandboxRoot } from "../apiRouter.js";
+import { verifySandboxPath, SANDBOX_ROOT, sandboxCfg, systemConfig, getDynamicSandboxRoot, getYoloMode, getCommandBlacklist, getCommandWhitelist } from "../apiRouter.js";
 
 const execPromise = promisify(exec);
 
@@ -15,10 +15,43 @@ export function registerSandboxRoutes(app: express.Express, db: any) {
     res.json(systemConfig);
   });
 
-  app.post("/api/sandbox/file", (req, res) => {
+  app.get("/api/sandbox/pending-confirmations", (req, res) => {
+    const list = (globalThis.pendingConfirmations || []).filter(item => item.status === 'pending');
+    res.json({ list });
+  });
+
+  app.post("/api/sandbox/pending-confirmations/:id/action", (req, res) => {
+    const { id } = req.params;
+    const { status } = req.body; // 'approved' | 'always' | 'denied'
+    const list = globalThis.pendingConfirmations || [];
+    const item = list.find(i => i.id === id);
+    if (!item) {
+      return res.status(404).json({ error: "Pending confirmation not found." });
+    }
+    item.status = status;
+    res.json({ success: true, item });
+  });
+
+  app.post("/api/sandbox/pending-confirmations/batch/action", (req, res) => {
+    const { ids, status } = req.body; // ids: string[] or undefined (undefined means all pending), status: 'approved' | 'denied'
+    const list = globalThis.pendingConfirmations || [];
+    const updatedItems: any[] = [];
+    
+    for (const item of list) {
+      if (item.status === 'pending') {
+        if (!ids || ids.includes(item.id)) {
+          item.status = status;
+          updatedItems.push(item);
+        }
+      }
+    }
+    res.json({ success: true, count: updatedItems.length, items: updatedItems });
+  });
+
+  app.post("/api/sandbox/file", async (req, res) => {
     try {
       const { name, content, action, confirmed } = req.body;
-      const fullPath = verifySandboxPath(name || ".", action, confirmed);
+      const fullPath = await verifySandboxPath(name || ".", action, confirmed);
       
       if (action === 'write') {
         const dir = path.dirname(fullPath);
@@ -60,17 +93,22 @@ export function registerSandboxRoutes(app: express.Express, db: any) {
     const { command } = req.body;
     if (!command) return res.status(400).json({ error: "No command provided" });
     
-    const settings = SettingsManager.getInstance().getAll();
-    const isYolo = process.env.YUIHIME_YOLO_MODE === "true" ||
-                   process.env.YUIHIME_SANDBOX_YOLO === "true" ||
-                   process.env.YUIHIME_SHELL_YOLO === "true" ||
-                   settings.sandbox_paths?.yolo_mode === true;
-    if (!isYolo && sandboxCfg.commandBlacklist.some((b: string) => command.includes(b))) {
+    const yoloMode = getYoloMode();
+    const isYoloFull = yoloMode === 'full';
+    const isYoloHalf = yoloMode === 'half';
+
+    const blacklist = getCommandBlacklist();
+    const whitelist = getCommandWhitelist();
+
+    const isBlacklisted = blacklist.some((b: string) => command.includes(b));
+    const isWhitelisted = whitelist.some((w: string) => command.includes(w));
+
+    if (!isYoloFull && isBlacklisted && !isWhitelisted) {
        return res.status(403).json({ error: "Command blocked by security sandbox." });
     }
 
     const dynamicSandboxRoot = getDynamicSandboxRoot();
-    const workingDir = isYolo ? process.cwd() : dynamicSandboxRoot;
+    const workingDir = (isYoloFull || isYoloHalf) ? process.cwd() : dynamicSandboxRoot;
     exec(command, { cwd: workingDir, timeout: sandboxCfg.execTimeoutMs }, (error: any, stdout: string, stderr: string) => {
       res.json({
         stdout: stdout || "",
@@ -87,7 +125,7 @@ export function registerSandboxRoutes(app: express.Express, db: any) {
       const { action, target, files, archiveName, sortBy, targetFormat, options } = req.body;
       
       if (action === 'sort') {
-        const targetPath = verifySandboxPath(target || ".");
+        const targetPath = await verifySandboxPath(target || ".");
         const dirEntries = readdirSync(targetPath, { withFileTypes: true });
         const movedFiles: string[] = [];
 
@@ -156,12 +194,12 @@ export function registerSandboxRoutes(app: express.Express, db: any) {
         }
 
         const safeArchiveName = path.basename(archiveName).endsWith('.zip') ? archiveName : `${archiveName}.zip`;
-        const archivePath = verifySandboxPath(safeArchiveName);
+        const archivePath = await verifySandboxPath(safeArchiveName);
         
-        const escapedFiles = files.map(f => {
-          const verified = verifySandboxPath(f);
+        const escapedFiles = (await Promise.all(files.map(async f => {
+          const verified = await verifySandboxPath(f);
           return path.relative(SANDBOX_ROOT, verified);
-        }).map(p => `"${p}"`).join(" ");
+        }))).map(p => `"${p}"`).join(" ");
 
         console.log(`[FILE_MODULE] Archiving files: ${escapedFiles} into ${safeArchiveName}`);
         
@@ -196,7 +234,7 @@ export function registerSandboxRoutes(app: express.Express, db: any) {
       
       else if (action === 'summarize') {
         if (!target) return res.status(400).json({ error: "target file is required for summary." });
-        const filePath = verifySandboxPath(target);
+        const filePath = await verifySandboxPath(target);
         if (!existsSync(filePath)) return res.status(404).json({ error: "Target file does not exist." });
 
         const rawContent = readFileSync(filePath, 'utf-8');
@@ -239,7 +277,7 @@ export function registerSandboxRoutes(app: express.Express, db: any) {
         if (!target) return res.status(400).json({ error: "target file path is required." });
         if (!targetFormat) return res.status(400).json({ error: "targetFormat is required." });
 
-        const filePath = verifySandboxPath(target);
+        const filePath = await verifySandboxPath(target);
         if (!existsSync(filePath)) return res.status(404).json({ error: "Source file does not exist." });
         const currentExt = path.extname(filePath).toLowerCase();
 
@@ -300,7 +338,7 @@ export function registerSandboxRoutes(app: express.Express, db: any) {
           });
         }
 
-        const newFilePath = verifySandboxPath(newFileName);
+        const newFilePath = await verifySandboxPath(newFileName);
         writeFileSync(newFilePath, convertedContent, 'utf-8');
 
         return res.json({ 

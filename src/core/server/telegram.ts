@@ -196,6 +196,51 @@ export async function initializeBot(activeDb?: any, force = false, dropPending =
     await handlePairingCode(ctx, args[1].trim());
   });
 
+  bot.command("approve", async (ctx) => {
+    const args = ctx.message.text.split(/\s+/);
+    if (args.length < 2) {
+      return ctx.reply("Silakan sertakan ID permintaan. Contoh: /approve A8F2D1");
+    }
+    const id = args[1].trim().toUpperCase();
+    const list = globalThis.pendingConfirmations || [];
+    const item = list.find(i => i.id === id);
+    if (!item) {
+      return ctx.reply(`❌ Permintaan konfirmasi dengan ID "${id}" tidak ditemukan.`);
+    }
+    item.status = 'approved';
+    return ctx.reply(`✅ Permintaan ${id} (${item.action} -> ${item.targetPath}) BERHASIL DISETUJUI.`);
+  });
+
+  bot.command("always", async (ctx) => {
+    const args = ctx.message.text.split(/\s+/);
+    if (args.length < 2) {
+      return ctx.reply("Silakan sertakan ID permintaan. Contoh: /always A8F2D1");
+    }
+    const id = args[1].trim().toUpperCase();
+    const list = globalThis.pendingConfirmations || [];
+    const item = list.find(i => i.id === id);
+    if (!item) {
+      return ctx.reply(`❌ Permintaan konfirmasi dengan ID "${id}" tidak ditemukan.`);
+    }
+    item.status = 'always';
+    return ctx.reply(`✅ Permintaan ${id} BERHASIL DISETUJUI. Mode "Always Acc" diaktifkan untuk sesi ini.`);
+  });
+
+  bot.command("deny", async (ctx) => {
+    const args = ctx.message.text.split(/\s+/);
+    if (args.length < 2) {
+      return ctx.reply("Silakan sertakan ID permintaan. Contoh: /deny A8F2D1");
+    }
+    const id = args[1].trim().toUpperCase();
+    const list = globalThis.pendingConfirmations || [];
+    const item = list.find(i => i.id === id);
+    if (!item) {
+      return ctx.reply(`❌ Permintaan konfirmasi dengan ID "${id}" tidak ditemukan.`);
+    }
+    item.status = 'denied';
+    return ctx.reply(`❌ Permintaan ${id} (${item.action} -> ${item.targetPath}) BERHASIL DITOLAK.`);
+  });
+
   bot.on("message", async (ctx) => {
     const currentSettings = Kernel.getInstance().getSettings().getAll();
     
@@ -203,6 +248,40 @@ export async function initializeBot(activeDb?: any, force = false, dropPending =
     const textMsg = (ctx.message as any).text || "";
     const captionMsg = (ctx.message as any).caption || "";
     let rawInput = textMsg || captionMsg || "";
+
+    // Intercept direct text confirmations (e.g., acc, always, tolak)
+    const cleanInput = rawInput.trim().toLowerCase();
+    const pendingList = (globalThis.pendingConfirmations || []).filter(item => item.status === 'pending');
+    
+    if (pendingList.length > 0) {
+      const words = cleanInput.split(/\s+/);
+      const isAcc = words.includes('acc') || words.includes('approve') || words.includes('setuju') || words.includes('/approve');
+      const isAlways = words.includes('always') || words.includes('selalu') || words.includes('/always');
+      const isDeny = words.includes('tolak') || words.includes('deny') || words.includes('/deny');
+      
+      if (isAcc || isAlways || isDeny) {
+        let foundId = words.find(w => w.length === 6 && /^[a-z0-9]+$/i.test(w))?.toUpperCase();
+        if (!foundId && pendingList.length === 1) {
+          foundId = pendingList[0].id;
+        }
+        
+        if (foundId) {
+          const item = pendingList.find(i => i.id === foundId);
+          if (item) {
+            if (isAcc) {
+              item.status = 'approved';
+              return ctx.reply(`✅ Permintaan ${foundId} (${item.action} -> ${item.targetPath}) BERHASIL DISETUJUI.`);
+            } else if (isAlways) {
+              item.status = 'always';
+              return ctx.reply(`✅ Permintaan ${foundId} BERHASIL DISETUJUI. Mode "Always Acc" diaktifkan.`);
+            } else if (isDeny) {
+              item.status = 'denied';
+              return ctx.reply(`❌ Permintaan ${foundId} (${item.action} -> ${item.targetPath}) BERHASIL DITOLAK.`);
+            }
+          }
+        }
+      }
+    }
 
     // Check if user is attempting to enter pairing code directly via text
     const pairMatch = rawInput.trim().match(/^\/pair\s+(\d{6})/i) || 

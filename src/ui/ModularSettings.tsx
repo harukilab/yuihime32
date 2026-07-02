@@ -1324,7 +1324,8 @@ export const ModularSettings: React.FC<ModularSettingsProps> = ({
         agent_path: './agent',
         addons_path: './addons',
         auto_acc_user_data: false,
-        yolo_mode: false
+        yolo_mode: false,
+        confirmation_timeout: 45
       };
     } else {
       if (initializedSettings.sandbox_paths.auto_acc_user_data === undefined) {
@@ -1332,6 +1333,9 @@ export const ModularSettings: React.FC<ModularSettingsProps> = ({
       }
       if (initializedSettings.sandbox_paths.yolo_mode === undefined) {
         initializedSettings.sandbox_paths.yolo_mode = false;
+      }
+      if (initializedSettings.sandbox_paths.confirmation_timeout === undefined) {
+        initializedSettings.sandbox_paths.confirmation_timeout = 45;
       }
     }
     if (!initializedSettings.developer) {

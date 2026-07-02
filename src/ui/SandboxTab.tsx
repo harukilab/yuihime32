@@ -228,12 +228,58 @@ export const SandboxTab: React.FC = () => {
       return;
     }
 
+    // Intercept approve / acc / always / deny / tolak commands
+    if (baseCmd === 'approve' || baseCmd === 'acc' || baseCmd === 'always' || baseCmd === 'deny' || baseCmd === 'tolak') {
+      try {
+        const response = await fetch('/api/sandbox/pending-confirmations');
+        const data = await response.json();
+        const pendingList = data.list || [];
+        
+        let targetId = args.length > 1 ? args[1].toUpperCase() : '';
+        if (!targetId && pendingList.length === 1) {
+          targetId = pendingList[0].id;
+        }
+
+        if (!targetId) {
+          printToTerminal(`❌ Silakan sertakan ID konfirmasi kustom. Contoh: approve ${pendingList[0]?.id || 'ABCDEF'}`, 'stderr');
+          return;
+        }
+
+        const statusMap: Record<string, 'approved' | 'always' | 'denied'> = {
+          approve: 'approved',
+          acc: 'approved',
+          always: 'always',
+          deny: 'denied',
+          tolak: 'denied'
+        };
+        const status = statusMap[baseCmd];
+
+        const actionResponse = await fetch(`/api/sandbox/pending-confirmations/${targetId}/action`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status })
+        });
+        const actionResult = await actionResponse.json();
+        if (actionResult.success) {
+          printToTerminal(`✅ Berhasil memproses otorisasi kognitif untuk ID ${targetId} dengan status [${status.toUpperCase()}].`, 'system');
+        } else {
+          printToTerminal(`❌ Gagal memperbarui otorisasi untuk ID ${targetId}: ${actionResult.error}`, 'stderr');
+        }
+      } catch (err: any) {
+        printToTerminal(`❌ Kesalahan saat menghubungi API Sandbox: ${err.message}`, 'stderr');
+      }
+      return;
+    }
+
     // 2. Help
     if (baseCmd === 'help') {
       printToTerminal(`Available Commands inside Yuihime Terminal Space:`, 'system');
       printToTerminal(`--------------------------------------------------------`, 'system');
       printToTerminal(`  help                  : Menampilkan menu bantuan terminal ini.`, 'system');
       printToTerminal(`  clear                 : Bersihkan seluruh baris log terminal.`, 'system');
+      printToTerminal(`  approve <id>          : Setujui tindakan perubahan berkas sekali (Acc).`, 'system');
+      printToTerminal(`  always <id>           : Selalu setujui seluruh tindakan berkas sesi ini.`, 'system');
+      printToTerminal(`  deny <id>             : Tolak tindakan perubahan berkas batin (Tolak).`, 'system');
       printToTerminal(`  yuihime               : Cetak status lengkap ekosistem batin Yuihime.`, 'system');
       printToTerminal(`  ls                    : Tampilkan file/folder di sandbox saat ini.`, 'system');
       printToTerminal(`  cat <file>            : Menampilkan isi dari file kustom secara langsung.`, 'system');

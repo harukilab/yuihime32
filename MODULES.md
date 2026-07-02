@@ -7,6 +7,33 @@ Dokumen ini memuat daftar lengkap dari seluruh modul kognitif, *add-ons*, jembat
 ## ⏳ Sejarah Pembaruan Modul
 *Dokumen ini wajib diperbarui setiap kali terjadi pembuatan, pemindahan, atau modifikasi fungsionalitas modul.*
 
+- **2026-07-02 (v3.19)**: **Pengaturan Batas Loop Kognitif (Manual & Unlimited)**:
+  - Menambahkan kolom pengaturan `maxLoops` (Batas Putaran Manual) dan `unlimitedLoops` (Opsi Tanpa Batas) di tab pengaturan sistem `SystemTab.tsx` (skema `developer`).
+  - Mengonfigurasi `cortexThinkEngine.ts` agar membaca nilai `maxLoops` dan `unlimitedLoops` dari berkas `config.toml` (melalui `settings.developer`) secara asinkron sebelum memulai putaran pemikiran AI.
+  - Mengimplementasikan sistem pengabaian batas loop kognitif tak terbatas jika opsi `unlimitedLoops` diaktifkan oleh pengguna.
+
+- **2026-07-02 (v3.18)**: **Penyempurnaan Otorisasi Akses Berkas (Batch Mode & Konfigurasi Waktu Tunggu)**:
+  - Menambahkan endpoint batch `/api/sandbox/pending-confirmations/batch/action` untuk menyetujui (`approved`) atau menolak (`denied`) seluruh antrean berkas sekaligus.
+  - Memperbarui panel **Modal Dialog File Access** di Web UI (`App.tsx`) untuk menampilkan daftar antrean berkas secara interaktif beserta tombol pintas **Batch Approve (Setujui Semua)** dan **Batch Deny (Tolak Semua / Clear All)**.
+  - Menambahkan konfigurasi interaktif **Waktu Tunggu Konfirmasi (Detik)** di tab pengaturan sistem (`SystemTab.tsx` -> `confirmation_timeout`) yang tersinkronisasi dinamis ke `config.toml` dan dibaca real-time oleh `apiRouter.ts`.
+
+- **2026-07-02 (v3.17)**: **Sistem Dialog Konfirmasi Interaktif Multi-Saluran (Web, Bot, & TUI)**:
+  - Mengimplementasikan antrean otorisasi global `globalThis.pendingConfirmations` untuk menampung seluruh permohonan akses berkas dinamis yang ditangguhkan.
+  - Memodifikasi `verifySandboxPath` dan `resolveSystemRootPath` menjadi fungsi asinkron (`async`) untuk menjeda eksekusi instruksi secara transparan selama menunggu persetujuan pengguna.
+  - Menghadirkan antarmuka visual **Modal Dialog global** di Web UI (`App.tsx`) yang otomatis muncul ketika YuiHime meminta konfirmasi modifikasi berkas dalam mode YOLO *Half* maupun saat menyentuh berkas di luar wilayah aman dalam mode *Off*.
+  - Mengintegrasikan otorisasi jarak jauh via **Telegram Bot** dengan menambahkan command `/approve`, `/always`, `/deny`, serta deteksi kata kunci balasan langsung (seperti "acc" atau "tolak").
+  - Menambahkan dukungan kontrol otorisasi via **TUI (Terminal CLI)** pada `SandboxTab.tsx` dengan perintah baru `approve <id>`, `always <id>`, dan `deny <id>` yang terdokumentasi di menu bantuan (`help`).
+
+- **2026-07-02 (v3.16)**: **Sistem Whitelist dan Blacklist Shell CLI yang Dapat Diedit**:
+  - Menambahkan dynamic whitelist (`getCommandWhitelist`) dan blacklist (`getCommandBlacklist`) untuk pengamanan batin atas eksekusi Shell CLI.
+  - Mempersiapkan integrasi ini di dalam router backend `sandboxRouter.ts` dan `toolsRouter.ts`.
+  - Mengimplementasikan kolom input pengaturan interaktif untuk **Shell Command Blacklist** dan **Shell Command Whitelist** di panel UI Settings (`SystemTab.tsx`).
+
+- **2026-07-02 (v3.15)**: **Sistem Tiga Mode YOLO Kognitif (Off, Half, Full) & Whitelist**:
+  - Mengubah pengaturan `yolo_mode` biner menjadi 3 tingkat kebijakan batin terpadu: `full`, `half`, dan `off`.
+  - Mengintegrasikan logika ini dalam `verifySandboxPath` pada `apiRouter.ts` serta router CLI execution pada `sandboxRouter.ts` dan `toolsRouter.ts`.
+  - Mengimplementasikan filter Whitelist berkas dinamis yang dikonfigurasi langsung dari UI Settings untuk melompati konfirmasi manual pada mode YOLO HALF.
+
 - **2026-07-02 (v3.14)**: **Penyatuan Resolusi Path Sistem (`resolveSystemRootPath`)**:
   - Membuat utilitas terpadu `resolveSystemRootPath` dalam `apiRouter.ts` untuk memproses seluruh manipulasi path yang berkaitan dengan `YUIHIME_SYSTEM_ROOT` (atau `apiCustomSystemRoot`).
   - Mengganti logika pembatasan path hardcoded pada tools seperti `write`, `read`, `download`, dan `send` di `toolsRouter.ts` dengan utilitas anyar ini guna menghindari bug "access denied" saat melakukan operasi berkas di luar konteks repositori ketika diizinkan sistem.

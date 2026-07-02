@@ -1,6 +1,45 @@
 # YuiHime Project Updates Logs
 ---
 
+## [3.19] - 2026-07-02
+### Added & Improved
+- **Pengaturan Batas Loop Kognitif (Manual & Unlimited)**:
+  - Menambahkan kolom pengaturan `maxLoops` (Maximum Loops / Batas Manual) dan `unlimitedLoops` (Unlimited Loops / Opsi Tanpa Batas) di bawah tab pengaturan sistem `SystemTab.tsx` (skema `developer`).
+  - Mengonfigurasi `cortexThinkEngine.ts` agar membaca nilai `maxLoops` dan `unlimitedLoops` dari berkas `config.toml` (melalui `settings.developer`) secara asinkron sebelum memulai putaran pemikiran AI.
+  - Mengimplementasikan sistem pengabaian batas loop kognitif tak terbatas jika opsi `unlimitedLoops` diaktifkan oleh pengguna.
+
+## [3.18] - 2026-07-02
+### Added & Improved
+- **Penyempurnaan Otorisasi Akses Berkas (Batch Mode & Konfigurasi Waktu Tunggu)**:
+  - Menambahkan endpoint batch `/api/sandbox/pending-confirmations/batch/action` untuk menyetujui (`approved`) atau menolak (`denied`) seluruh antrean berkas sekaligus.
+  - Memperbarui panel **Modal Dialog File Access** di Web UI (`App.tsx`) untuk menampilkan daftar antrean berkas secara interaktif beserta tombol pintas **Batch Approve (Setujui Semua)** dan **Batch Deny (Tolak Semua / Clear All)**.
+  - Menambahkan konfigurasi interaktif **Waktu Tunggu Konfirmasi (Detik)** di tab pengaturan sistem (`SystemTab.tsx` -> `confirmation_timeout`) yang tersinkronisasi dinamis ke `config.toml` dan dibaca real-time oleh `apiRouter.ts`.
+
+## [3.17] - 2026-07-02
+### Added & Improved
+- **Sistem Dialog Konfirmasi Interaktif Multi-Saluran (Web, Bot, & TUI)**:
+  - Mengimplementasikan antrean otorisasi global `globalThis.pendingConfirmations` untuk menampung seluruh permohonan akses berkas dinamis yang ditangguhkan.
+  - Memodifikasi `verifySandboxPath` dan `resolveSystemRootPath` menjadi fungsi asinkron (`async`) untuk menjeda eksekusi instruksi secara transparan selama menunggu persetujuan pengguna.
+  - Menghadirkan antarmuka visual **Modal Dialog global** di Web UI (`App.tsx`) yang otomatis muncul ketika YuiHime meminta konfirmasi modifikasi berkas dalam mode YOLO *Half* maupun saat menyentuh berkas di luar wilayah aman dalam mode *Off*.
+  - Mengintegrasikan otorisasi jarak jauh via **Telegram Bot** dengan menambahkan command `/approve`, `/always`, `/deny`, serta deteksi natural kata kunci balasan langsung (seperti "acc" atau "tolak").
+  - Menambahkan dukungan kontrol otorisasi via **TUI (Terminal CLI)** pada `SandboxTab.tsx` dengan perintah baru `approve <id>`, `always <id>`, dan `deny <id>` yang terdokumentasi di menu bantuan (`help`).
+
+## [3.16] - 2026-07-02
+### Added & Improved
+- **Sistem Whitelist dan Blacklist Shell CLI yang Dapat Diedit**:
+  - Menambahkan integrasi dynamic whitelist (`getCommandWhitelist`) dan blacklist (`getCommandBlacklist`) untuk eksekusi CLI Shell di `apiRouter.ts`.
+  - Mengimplementasikan filter blacklist dan whitelist dinamis ini pada seluruh endpoint eksekusi shell di `sandboxRouter.ts` dan `toolsRouter.ts`.
+  - Menghadirkan input pengaturan baru **Shell Command Blacklist** dan **Shell Command Whitelist** pada tab konfigurasi sistem di UI Settings (`SystemTab.tsx`) untuk kustomisasi penuh langsung melalui antarmuka pengguna.
+
+## [3.15] - 2026-07-02
+### Added & Improved
+- **Sistem Tiga Mode YOLO Kognitif (Off, Half, Full) & Whitelist**:
+  - Memperluas pengaturan `yolo_mode` menjadi tiga tingkat pengamanan batin: `full`, `half`, dan `off`.
+  - **FULL**: Bebas batin seutuhnya, CLI Shell dan manipulasi berkas dapat dieksekusi di manapun tanpa sensor maupun konfirmasi.
+  - **HALF**: Membatasi Shell CLI dari perintah berbahaya (blacklist), namun membebaskan berkas di luar sandbox. Setiap manipulasi berkas di luar direktori bawaan wajib meminta konfirmasi dengan memperlihatkan path target (`bpath`) dan jenis aksi, kecuali path/berkas tersebut terdaftar di dalam Whitelist.
+  - **OFF**: Pengamanan penuh standar ("Path Jail") di mana pembatasan dikarantina secara ketat ke dalam direktori `user_data`.
+  - Menambahkan input field untuk mengatur **Whitelist** berkas secara fleksibel langsung di tab konfigurasi sistem pada antarmuka pengguna (UI Settings).
+
 ## [3.14] - 2026-07-02
 ### Added & Improved
 - **Penyatuan Resolusi Path Sistem (`resolveSystemRootPath`)**:

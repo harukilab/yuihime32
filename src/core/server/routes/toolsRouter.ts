@@ -6,7 +6,7 @@ import { exec } from "child_process";
 import { promisify } from "util";
 import { AIService } from "../../kernel/ai.js";
 import { SettingsManager } from "../../kernel/settings.js";
-import { apiCustomSystemRoot, verifySandboxPath, getDynamicSandboxRoot, resolveSystemRootPath } from "../apiRouter.js";
+import { apiCustomSystemRoot, verifySandboxPath, getDynamicSandboxRoot, resolveSystemRootPath, getYoloMode, getCommandBlacklist, getCommandWhitelist } from "../apiRouter.js";
 import { CustomToolsLoader } from "../../CustomToolsLoader.js";
 
 const execPromise = promisify(exec);
@@ -198,18 +198,22 @@ export function registerToolsRoutes(app: express.Express, db: any) {
     if (!command) return res.status(400).json({ error: "No command provided" });
     
     try {
-      const settings = SettingsManager.getInstance().getAll();
-      const isYolo = process.env.YUIHIME_YOLO_MODE === "true" ||
-                     process.env.YUIHIME_SANDBOX_YOLO === "true" ||
-                     process.env.YUIHIME_SHELL_YOLO === "true" ||
-                     settings.sandbox_paths?.yolo_mode === true;
-      const restricted = ["rm -rf /", "mkfs", "dd"];
-      if (!isYolo && restricted.some(r => command.includes(r))) {
+      const yoloMode = getYoloMode();
+      const isYoloFull = yoloMode === 'full';
+      const isYoloHalf = yoloMode === 'half';
+
+      const blacklist = getCommandBlacklist();
+      const whitelist = getCommandWhitelist();
+
+      const isBlacklisted = blacklist.some((b: string) => command.includes(b));
+      const isWhitelisted = whitelist.some((w: string) => command.includes(w));
+
+      if (!isYoloFull && isBlacklisted && !isWhitelisted) {
         return res.status(403).json({ error: "Command restricted for safety." });
       }
 
       const sandboxDir = getDynamicSandboxRoot();
-      const workingDir = isYolo ? process.cwd() : sandboxDir;
+      const workingDir = (isYoloFull || isYoloHalf) ? process.cwd() : sandboxDir;
       await fs.mkdir(workingDir, { recursive: true });
 
       const { stdout, stderr } = await execPromise(command, { cwd: workingDir, timeout: 10000 });
@@ -224,7 +228,7 @@ export function registerToolsRoutes(app: express.Express, db: any) {
     if (!filename) return res.status(400).json({ error: "No filename provided" });
 
     try {
-      const safePath = resolveSystemRootPath(filename, 'write');
+      const safePath = await resolveSystemRootPath(filename, 'write');
       await fs.mkdir(path.dirname(safePath), { recursive: true });
       await fs.writeFile(safePath, content || "");
       res.json({ success: true, path: safePath });
@@ -238,7 +242,7 @@ export function registerToolsRoutes(app: express.Express, db: any) {
     if (!filename) return res.status(400).json({ error: "No filename provided" });
 
     try {
-      const safePath = resolveSystemRootPath(filename as string, 'read');
+      const safePath = await resolveSystemRootPath(filename as string, 'read');
       const content = await fs.readFile(safePath, "utf-8");
       res.json({ content });
     } catch (error: any) {
@@ -298,7 +302,7 @@ export function registerToolsRoutes(app: express.Express, db: any) {
         }
       }
 
-      const safePath = resolveSystemRootPath(finalName, 'write');
+      const safePath = await resolveSystemRootPath(finalName, 'write');
 
       const arrayBuffer = await fetchResponse.arrayBuffer();
       const buffer = Buffer.from(arrayBuffer);
@@ -322,7 +326,7 @@ export function registerToolsRoutes(app: express.Express, db: any) {
     if (!filename) return res.status(400).json({ error: "No filename provided" });
 
     try {
-      const safePath = resolveSystemRootPath(filename, 'read');
+      const safePath = await resolveSystemRootPath(filename, 'read');
 
       if (!existsSync(safePath)) {
         return res.status(404).json({ error: `File "${filename}" not found.` });
@@ -434,8 +438,8 @@ export function registerToolsRoutes(app: express.Express, db: any) {
         if (!source || !destination) {
           return res.status(400).json({ error: "Source and destination are required for copy action." });
         }
-        const safeSrc = verifySandboxPath(source, action, confirmed);
-        const safeDst = verifySandboxPath(destination, action, confirmed);
+        const safeSrc = await verifySandboxPath(source, action, confirmed);
+        const safeDst = await verifySandboxPath(destination, action, confirmed);
 
         if (!existsSync(safeSrc)) {
           return res.status(404).json({ error: `Source path "${source}" does not exist.` });
@@ -456,8 +460,8 @@ export function registerToolsRoutes(app: express.Express, db: any) {
         if (!source || !destination) {
           return res.status(400).json({ error: "Source and destination are required for move action." });
         }
-        const safeSrc = verifySandboxPath(source, action, confirmed);
-        const safeDst = verifySandboxPath(destination, action, confirmed);
+        const safeSrc = await verifySandboxPath(source, action, confirmed);
+        const safeDst = await verifySandboxPath(destination, action, confirmed);
 
         if (!existsSync(safeSrc)) {
           return res.status(404).json({ error: `Source path "${source}" does not exist.` });
@@ -478,7 +482,7 @@ export function registerToolsRoutes(app: express.Express, db: any) {
         if (!targetPath) {
           return res.status(400).json({ error: "Path is required for delete action." });
         }
-        const safePath = verifySandboxPath(targetPath, action, confirmed);
+        const safePath = await verifySandboxPath(targetPath, action, confirmed);
 
         if (!existsSync(safePath)) {
           return res.status(404).json({ error: `Path "${targetPath}" does not exist.` });
@@ -501,7 +505,7 @@ export function registerToolsRoutes(app: express.Express, db: any) {
         if (!targetPath) {
           return res.status(400).json({ error: "Path is required for mkdir action." });
         }
-        const safePath = verifySandboxPath(targetPath);
+        const safePath = await verifySandboxPath(targetPath);
 
         await fs.mkdir(safePath, { recursive: true });
 
@@ -516,7 +520,7 @@ export function registerToolsRoutes(app: express.Express, db: any) {
         if (!targetPath) {
           return res.status(400).json({ error: "Path is required for exists action." });
         }
-        const safePath = verifySandboxPath(targetPath);
+        const safePath = await verifySandboxPath(targetPath);
         const exists = existsSync(safePath);
 
         return res.json({
@@ -530,7 +534,7 @@ export function registerToolsRoutes(app: express.Express, db: any) {
         if (!targetPath) {
           return res.status(400).json({ error: "Path is required for info action." });
         }
-        const safePath = verifySandboxPath(targetPath);
+        const safePath = await verifySandboxPath(targetPath);
 
         if (!existsSync(safePath)) {
           return res.status(404).json({ error: `Path "${targetPath}" does not exist.` });
@@ -553,7 +557,7 @@ export function registerToolsRoutes(app: express.Express, db: any) {
       }
 
       if (action === "find") {
-        const safeDir = targetPath ? verifySandboxPath(targetPath) : sandboxDir;
+        const safeDir = targetPath ? await verifySandboxPath(targetPath) : sandboxDir;
         if (!existsSync(safeDir)) {
           return res.status(404).json({ error: `Directory "${targetPath || '.'}" does not exist.` });
         }

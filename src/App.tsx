@@ -65,6 +65,43 @@ import { setupResizeObserverAndViewport } from './ui/utils/viewportHelper';
 
 export default function App() {
   const [config, setConfig] = useState<any>(null);
+  const [globalPendingConfirm, setGlobalPendingConfirm] = useState<any[]>([]);
+
+  useEffect(() => {
+    let active = true;
+    const pollConfirmations = async () => {
+      try {
+        const res = await fetch('/api/sandbox/pending-confirmations');
+        if (!res.ok) return;
+        const data = await res.json();
+        if (active) {
+          setGlobalPendingConfirm(data.list || []);
+        }
+      } catch (err) {
+        // quiet fail on initialization
+      }
+    };
+    pollConfirmations();
+    const timer = setInterval(pollConfirmations, 2000);
+    return () => {
+      active = false;
+      clearInterval(timer);
+    };
+  }, []);
+
+  const handleBatchAction = async (status: 'approved' | 'denied') => {
+    try {
+      await fetch('/api/sandbox/pending-confirmations/batch/action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status })
+      });
+      setGlobalPendingConfirm([]);
+    } catch (err) {
+      console.error("Failed to run batch action:", err);
+    }
+  };
+
   const cortexRef = useRef<Cortex | null>(null);
   const soulRef = useRef<Soul | null>(null);
   const isStreamingRef = useRef(false);
@@ -2688,7 +2725,136 @@ export default function App() {
         </section>
       </main>
 
-      {}
+      {globalPendingConfirm.length > 0 && (
+        <div className="fixed inset-0 bg-[#07070a]/90 backdrop-blur-md flex items-center justify-center z-[9999] p-4 font-sans animate-fade-in">
+          <div className="bg-[#0e0e14] border border-white/10 rounded-2xl p-6 max-w-md md:max-w-lg w-full shadow-2xl relative overflow-hidden select-none text-left">
+            <div className="absolute -top-10 -right-10 w-32 h-32 bg-amber-500/10 rounded-full blur-2xl pointer-events-none" />
+            
+            <div className="flex items-start gap-4">
+              <div className="p-3 bg-amber-500/10 border border-amber-500/20 text-amber-500 rounded-xl shrink-0">
+                <ShieldAlert size={20} className="animate-pulse" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between gap-2 mb-1.5 flex-wrap">
+                  <h4 className="text-sm font-bold text-white tracking-tight leading-none">
+                    YuiHime File Access Authorization
+                  </h4>
+                  {globalPendingConfirm.length > 1 && (
+                    <span className="bg-amber-500/20 text-amber-400 text-[10px] font-bold px-2.5 py-0.5 rounded-full border border-amber-500/30 font-sans">
+                      Batch ({globalPendingConfirm.length} Antrean)
+                    </span>
+                  )}
+                </div>
+                <p className="text-[10px] text-zinc-500 font-mono mb-4 uppercase tracking-widest">
+                  ID AKTIF: <span className="text-amber-400 font-bold">{globalPendingConfirm[0].id}</span>
+                </p>
+                <p className="text-[11.5px] text-zinc-300 leading-relaxed mb-2">
+                  YuiHime is attempting a <strong className="text-amber-400 font-bold">{globalPendingConfirm[0].action.toUpperCase()}</strong> operation:
+                </p>
+                <div className="bg-black/45 border border-white/5 rounded-lg px-3 py-2 text-[10.5px] font-mono text-zinc-300 break-all mb-4">
+                  {globalPendingConfirm[0].targetPath}
+                </div>
+
+                {globalPendingConfirm.length > 1 && (
+                  <div className="mb-4 bg-zinc-950/50 border border-white/5 rounded-xl p-3">
+                    <p className="text-[10.5px] font-bold text-zinc-400 mb-1.5 flex items-center gap-1.5">
+                      <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                      Daftar Permintaan Lainnya ({globalPendingConfirm.length - 1}):
+                    </p>
+                    <div className="max-h-28 overflow-y-auto space-y-1.5 pr-1 scrollbar-thin scrollbar-thumb-white/10 text-[10px]">
+                      {globalPendingConfirm.slice(1).map((item) => (
+                        <div key={item.id} className="flex items-center justify-between bg-black/30 border border-white/5 px-2.5 py-1.5 rounded-lg gap-2">
+                          <span className="font-mono text-zinc-500 font-bold bg-white/5 px-1 py-0.5 rounded">{item.id}</span>
+                          <span className="font-bold text-amber-500 font-mono text-[9px] uppercase bg-amber-500/10 px-1 py-0.5 rounded border border-amber-500/15">{item.action}</span>
+                          <span className="text-zinc-400 truncate flex-1 text-left font-mono text-[9.5px]">{item.targetPath}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <p className="text-[10px] text-zinc-500 leading-relaxed mb-4">
+                  Select the level of authorization for Yuihime to execute this file system instruction:
+                </p>
+
+                <div className="flex flex-col gap-3">
+                  {globalPendingConfirm.length > 1 && (
+                    <div className="border border-amber-500/20 bg-amber-500/5 rounded-xl p-3 flex flex-col gap-2">
+                      <p className="text-[10px] font-bold text-amber-400/90 tracking-wide uppercase">
+                        ⚡ Opsi Batch (Semua {globalPendingConfirm.length} Permintaan)
+                      </p>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          onClick={() => handleBatchAction('approved')}
+                          className="py-2 bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 text-xs font-bold border border-amber-500/35 rounded-xl transition-all cursor-pointer active:scale-[0.98] text-center"
+                        >
+                          Setujui Semua
+                        </button>
+                        <button
+                          onClick={() => handleBatchAction('denied')}
+                          className="py-2 bg-red-500/15 hover:bg-red-500/25 text-red-400 text-xs font-bold border border-red-500/20 rounded-xl transition-all cursor-pointer active:scale-[0.98] text-center"
+                        >
+                          Tolak Semua
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex flex-col gap-2">
+                    {globalPendingConfirm.length > 1 && (
+                      <p className="text-[10px] font-bold text-zinc-500 tracking-wide uppercase mb-1">
+                        📍 Opsi Tunggal (Hanya ID: {globalPendingConfirm[0].id})
+                      </p>
+                    )}
+                    <button
+                      onClick={async () => {
+                        const id = globalPendingConfirm[0].id;
+                        await fetch(`/api/sandbox/pending-confirmations/${id}/action`, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ status: 'approved' })
+                        });
+                        setGlobalPendingConfirm(prev => prev.filter(x => x.id !== id));
+                      }}
+                      className="w-full py-2.5 bg-amber-500/15 hover:bg-amber-500/25 text-amber-400 text-xs font-bold border border-amber-500/20 rounded-xl transition-all cursor-pointer active:scale-[0.98] text-center font-sans"
+                    >
+                      Approve (Setujui Sekali)
+                    </button>
+                    <button
+                      onClick={async () => {
+                        const id = globalPendingConfirm[0].id;
+                        await fetch(`/api/sandbox/pending-confirmations/${id}/action`, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ status: 'always' })
+                        });
+                        setGlobalPendingConfirm(prev => prev.filter(x => x.id !== id));
+                      }}
+                      className="w-full py-2.5 bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 text-xs font-bold border border-emerald-500/20 rounded-xl transition-all cursor-pointer active:scale-[0.98] text-center font-sans"
+                    >
+                      Always Approve (Selalu Setujui Sesi Ini)
+                    </button>
+                    <button
+                      onClick={async () => {
+                        const id = globalPendingConfirm[0].id;
+                        await fetch(`/api/sandbox/pending-confirmations/${id}/action`, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ status: 'denied' })
+                        });
+                        setGlobalPendingConfirm(prev => prev.filter(x => x.id !== id));
+                      }}
+                      className="w-full py-2.5 bg-white/5 hover:bg-white/10 text-zinc-400 text-xs font-bold border border-white/5 rounded-xl transition-all cursor-pointer active:scale-[0.98] text-center font-sans"
+                    >
+                      Deny Action (Tolak)
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   </BugReportBoundary>
 );

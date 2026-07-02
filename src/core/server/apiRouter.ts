@@ -277,18 +277,146 @@ if (!existsSync(SANDBOX_ROOT)) {
   } catch (_) {}
 }
 
-export const verifySandboxPath = (targetPath: string, action?: string, confirmed?: boolean) => {
+export const getYoloMode = (): 'full' | 'half' | 'off' => {
+  const settings = SettingsManager.getInstance().getAll();
+  const envVal = process.env.YUIHIME_YOLO_MODE || process.env.YUIHIME_SANDBOX_YOLO || process.env.YUIHIME_SHELL_YOLO;
+  if (envVal === "full" || envVal === "true") return 'full';
+  if (envVal === "half") return 'half';
+  if (envVal === "off" || envVal === "false") return 'off';
+
+  const val = settings.sandbox_paths?.yolo_mode;
+  if (val === 'full' || val === true) return 'full';
+  if (val === 'half') return 'half';
+  return 'off';
+};
+
+export const getCommandBlacklist = (): string[] => {
+  const settings = SettingsManager.getInstance().getAll();
+  const customList = settings.sandbox_paths?.command_blacklist;
+  if (customList !== undefined) {
+    if (Array.isArray(customList)) return customList;
+    if (typeof customList === 'string') {
+      return customList.split(',').map((s: string) => s.trim()).filter(Boolean);
+    }
+  }
+  return sandboxCfg.commandBlacklist || ["rm -rf /", "mkfs", "dd", "reboot", "shutdown", "chmod 777 /"];
+};
+
+export const getCommandWhitelist = (): string[] => {
+  const settings = SettingsManager.getInstance().getAll();
+  const customList = settings.sandbox_paths?.command_whitelist;
+  if (customList !== undefined) {
+    if (Array.isArray(customList)) return customList;
+    if (typeof customList === 'string') {
+      return customList.split(',').map((s: string) => s.trim()).filter(Boolean);
+    }
+  }
+  return [];
+};
+
+declare global {
+  var pendingConfirmations: Array<{
+    id: string;
+    action: string;
+    targetPath: string;
+    status: 'pending' | 'approved' | 'always' | 'denied';
+    createdAt: number;
+  }>;
+}
+
+if (!globalThis.pendingConfirmations) {
+  globalThis.pendingConfirmations = [];
+}
+
+export const requestFileOperationConfirmation = async (action: string, targetPath: string): Promise<boolean> => {
+  const id = Math.random().toString(36).substring(2, 8).toUpperCase();
+  const item: {
+    id: string;
+    action: string;
+    targetPath: string;
+    status: 'pending' | 'approved' | 'always' | 'denied';
+    createdAt: number;
+  } = {
+    id,
+    action,
+    targetPath,
+    status: 'pending',
+    createdAt: Date.now()
+  };
+  globalThis.pendingConfirmations.push(item);
+
+  // Notify active Telegram bot if available
+  const activeTelegramBot = (globalThis as any).activeTelegramBot;
+  if (activeTelegramBot) {
+    const settings = SettingsManager.getInstance().getAll();
+    const masterChatId = settings.telegram_bridge?.masterChatId || settings.telegram_bridge?.chatId;
+    if (masterChatId) {
+      try {
+        await activeTelegramBot.telegram.sendMessage(masterChatId, 
+          `⚠️ *YUIHIME FILE ACCESS REQUEST* ⚠️\n\n` +
+          `• *Action*: \`${action.toUpperCase()}\`\n` +
+          `• *File*: \`${targetPath}\`\n` +
+          `• *ID*: \`${id}\`\n\n` +
+          `Please reply with:\n` +
+          `- \`/approve ${id}\` (Acc once)\n` +
+          `- \`/always ${id}\` (Always Acc this session)\n` +
+          `- \`/deny ${id}\` (Tolak)`,
+          { parse_mode: 'Markdown' }
+        );
+      } catch (err: any) {
+        console.error("[BOT_CONFIRM_NOTIFY_ERR] Failed to notify Telegram:", err.message);
+      }
+    }
+  }
+
+  // Print to TUI console / active web terminals
+  console.log(`\n==================================================`);
+  console.log(`⚠️  PENDING CONFIRMATION REQUEST [ID: ${id}]`);
+  console.log(`👉 Action: ${action.toUpperCase()}`);
+  console.log(`👉 File Path: ${targetPath}`);
+  console.log(`👉 Approve via Web, Telegram bot, or CLI commands:`);
+  console.log(`   - approve ${id}`);
+  console.log(`   - always ${id}`);
+  console.log(`   - deny ${id}`);
+  console.log(`==================================================\n`);
+
+  // Wait loop (configured timeout max)
+  const settings = SettingsManager.getInstance().getAll();
+  const configTimeout = settings.sandbox_paths?.confirmation_timeout ?? 45;
+  const timeoutMs = configTimeout * 1000;
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    if (item.status === 'approved') {
+      return true;
+    }
+    if (item.status === 'always') {
+      const settingsManager = SettingsManager.getInstance();
+      const s = settingsManager.getAll();
+      if (!s.sandbox_paths) s.sandbox_paths = {};
+      s.sandbox_paths.auto_acc_user_data = true;
+      await settingsManager.save(s);
+      return true;
+    }
+    if (item.status === 'denied') {
+      return false;
+    }
+    await new Promise(resolve => setTimeout(resolve, 500));
+  }
+
+  item.status = 'denied';
+  return false;
+};
+
+export const verifySandboxPath = async (targetPath: string, action?: string, confirmed?: boolean): Promise<string> => {
   if (targetPath.includes('\0')) {
     throw new Error("SECURITY_ALERT: Null Byte injection detected.");
   }
 
   const settings = SettingsManager.getInstance().getAll();
-  const isYolo = process.env.YUIHIME_YOLO_MODE === "true" ||
-                 process.env.YUIHIME_SANDBOX_YOLO === "true" ||
-                 process.env.YUIHIME_SHELL_YOLO === "true" ||
-                 settings.sandbox_paths?.yolo_mode === true;
-  if (isYolo) {
-    // Stage 2 when YOLO is ON: allow everything "all in os" - resolve relative to system cwd
+  const yoloMode = getYoloMode();
+
+  if (yoloMode === 'full') {
+    // Stage 2 when YOLO is ON (FULL): allow everything "all in os" - resolve relative to system cwd
     return path.resolve(process.cwd(), targetPath);
   }
 
@@ -316,40 +444,91 @@ export const verifySandboxPath = (targetPath: string, action?: string, confirmed
 
   // Stage 1 (Primary / Utama Prioritas): Jail within .yuihime or dynamicSandboxRoot
   let resolvedPath: string;
-  if (path.isAbsolute(cleanedPath)) {
-    resolvedPath = path.resolve(cleanedPath);
-  } else if (cleanedPath.startsWith('user_data/') || cleanedPath.startsWith('./user_data/')) {
-    const cleanRel = cleanedPath.startsWith('./') ? cleanedPath.substring(2) : cleanedPath;
-    const subPath = cleanRel.substring('user_data/'.length);
-    resolvedPath = path.resolve(dynamicSandboxRoot, subPath);
+  if (yoloMode === 'half') {
+    // In half mode, resolve files relative to system process root (cwd), allowing work outside the repository, but with checks!
+    resolvedPath = path.resolve(process.cwd(), targetPath);
   } else {
-    resolvedPath = path.resolve(apiCustomSystemRoot, cleanedPath);
-  }
-
-  if (!resolvedPath.startsWith(apiCustomSystemRoot) && !resolvedPath.startsWith(dynamicSandboxRoot)) {
-    throw new Error("SECURITY_ALERT: Unauthorized path access attempted outside .yuihime system root.");
-  }
-
-  try {
-    if (existsSync(resolvedPath)) {
-      const realResolved = realpathSync(resolvedPath);
-      if (!realResolved.startsWith(apiCustomSystemRoot) && !realResolved.startsWith(dynamicSandboxRoot)) {
-        throw new Error("SECURITY_ALERT: Symlink escape bypass detected.");
-      }
+    // Standard sandboxed / off mode: Jail path resolution
+    if (path.isAbsolute(cleanedPath)) {
+      resolvedPath = path.resolve(cleanedPath);
+    } else if (cleanedPath.startsWith('user_data/') || cleanedPath.startsWith('./user_data/')) {
+      const cleanRel = cleanedPath.startsWith('./') ? cleanedPath.substring(2) : cleanedPath;
+      const subPath = cleanRel.substring('user_data/'.length);
+      resolvedPath = path.resolve(dynamicSandboxRoot, subPath);
+    } else {
+      resolvedPath = path.resolve(apiCustomSystemRoot, cleanedPath);
     }
-  } catch (_) {}
 
-  // Stage 2 (Secondary Users Data): Inside user_data (dynamicSandboxRoot). Write/Edit or Delete actions require explicit confirmation.
-  const isInsideUserData = resolvedPath.startsWith(dynamicSandboxRoot);
-  if (isInsideUserData && (action === 'write' || action === 'delete' || action === 'move' || action === 'copy')) {
-    const fileExists = existsSync(resolvedPath);
-    const isEditOrDelete = (action === 'write' && fileExists) || action === 'delete' || action === 'move' || action === 'copy';
+    if (!resolvedPath.startsWith(apiCustomSystemRoot) && !resolvedPath.startsWith(dynamicSandboxRoot)) {
+      throw new Error("SECURITY_ALERT: Unauthorized path access attempted outside .yuihime system root.");
+    }
 
-    const settings = SettingsManager.getInstance().getAll();
-    const autoAcc = settings.sandbox_paths?.auto_acc_user_data === true;
+    try {
+      if (existsSync(resolvedPath)) {
+        const realResolved = realpathSync(resolvedPath);
+        if (!realResolved.startsWith(apiCustomSystemRoot) && !realResolved.startsWith(dynamicSandboxRoot)) {
+          throw new Error("SECURITY_ALERT: Symlink escape bypass detected.");
+        }
+      }
+    } catch (_) {}
+  }
 
-    if (isEditOrDelete && confirmed !== true && !autoAcc) {
-      throw new Error(`CONFIRMATION_REQUIRED: Action '${action}' on user_data file/folder requires explicit confirmation.`);
+  // Check file modifications / changes for "half" and "off" modes:
+  const isChangeAction = action === 'write' || action === 'delete' || action === 'move' || action === 'copy';
+  
+  if (isChangeAction) {
+    if (yoloMode === 'half') {
+      // Whitelist check
+      const checkWhitelist = (resolved: string): boolean => {
+        if (resolved.startsWith(dynamicSandboxRoot)) return true;
+        const dataDir = path.resolve(apiCustomSystemRoot, 'data');
+        if (resolved.startsWith(dataDir)) return true;
+        if (resolved.startsWith(apiCustomSystemRoot)) return true;
+
+        // Custom whitelist
+        const whitelistRaw = settings.sandbox_paths?.whitelist;
+        if (whitelistRaw) {
+          const list = Array.isArray(whitelistRaw)
+            ? whitelistRaw
+            : typeof whitelistRaw === 'string'
+              ? whitelistRaw.split(',').map(s => s.trim())
+              : [];
+          for (const item of list) {
+            if (!item) continue;
+            const resolvedItem = path.resolve(process.cwd(), item);
+            if (resolved === resolvedItem || resolved.startsWith(resolvedItem + path.sep)) {
+              return true;
+            }
+          }
+        }
+        return false;
+      };
+
+      if (!checkWhitelist(resolvedPath)) {
+        const autoAcc = settings.sandbox_paths?.auto_acc_user_data === true;
+        if (confirmed !== true && !autoAcc) {
+          const approved = await requestFileOperationConfirmation(action || 'write', targetPath);
+          if (!approved) {
+            throw new Error(`CONFIRMATION_REQUIRED: Action '${action}' on path '${targetPath}' was denied or timed out.`);
+          }
+        }
+      }
+    } else {
+      // Standard 'off' mode:
+      // Stage 2 (Secondary Users Data): Inside user_data (dynamicSandboxRoot). Write/Edit or Delete actions require explicit confirmation.
+      const isInsideUserData = resolvedPath.startsWith(dynamicSandboxRoot);
+      if (isInsideUserData) {
+        const fileExists = existsSync(resolvedPath);
+        const isEditOrDelete = (action === 'write' && fileExists) || action === 'delete' || action === 'move' || action === 'copy';
+
+        const autoAcc = settings.sandbox_paths?.auto_acc_user_data === true;
+        if (isEditOrDelete && confirmed !== true && !autoAcc) {
+          const approved = await requestFileOperationConfirmation(action || 'write', targetPath);
+          if (!approved) {
+            throw new Error(`CONFIRMATION_REQUIRED: Action '${action}' on user_data file/folder requires explicit confirmation.`);
+          }
+        }
+      }
     }
   }
 
@@ -360,7 +539,7 @@ export const verifySandboxPath = (targetPath: string, action?: string, confirmed
  * Resolves a target path against the YUIHIME_SYSTEM_ROOT environment variable (apiCustomSystemRoot)
  * or the user_data sandbox directory, validating security boundaries and avoiding path escape risks.
  */
-export const resolveSystemRootPath = (targetPath: string, action?: string, confirmed?: boolean): string => {
+export const resolveSystemRootPath = async (targetPath: string, action?: string, confirmed?: boolean): Promise<string> => {
   return verifySandboxPath(targetPath, action, confirmed);
 };
 
