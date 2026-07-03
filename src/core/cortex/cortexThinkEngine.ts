@@ -240,16 +240,6 @@ export async function executeCortexThink(
   // UPDATE: Mode Berpikir Cepat (Bypass Multi-Turn Reasoning) tidak lagi membatasi turn/iterasi ke 1 (maxIterations tetap 3).
   // Sebagai gantinya, mode ini mengaktifkan eksekusi paralel multi-proses / multi-node untuk seluruh tool calls secara simultan.
   let maxIterations = 3;
-  if (settings?.developer) {
-    if (settings.developer.unlimitedLoops === true) {
-      maxIterations = 999999;
-    } else if (settings.developer.maxLoops !== undefined) {
-      const parsed = parseInt(String(settings.developer.maxLoops), 10);
-      if (!isNaN(parsed) && parsed > 0) {
-        maxIterations = parsed;
-      }
-    }
-  }
   let loopContext = { ...augContext, config: settings };
 
   if (!state.systemHealth) {

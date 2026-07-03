@@ -1845,18 +1845,6 @@ export const SystemTab: React.FC<SystemTabProps> = ({
                       default: true,
                       description: 'Mengaktifkan putaran analisis multi-langkah batin untuk alat bantu (tools). Jika dimatikan, respons akan langsung dihasilkan dalam satu langkah cepat untuk performa maksimal.' 
                     },
-                    maxLoops: {
-                      label: 'Maximum Loops (Manual Limit)',
-                      type: 'number',
-                      default: 3,
-                      description: 'Batas putaran pemikiran (loop) maksimal yang diizinkan untuk eksekusi tools dalam satu turn. Default: 3.'
-                    },
-                    unlimitedLoops: {
-                      label: 'Unlimited Loops (Opsi Tanpa Batas)',
-                      type: 'boolean',
-                      default: false,
-                      description: 'Mengaktifkan putaran analisis batin tanpa batas (unlimited). Gunakan dengan sangat hati-hati karena dapat menghabiskan kuota token Anda!'
-                    },
                     disableStageTransitions: { label: 'Deactivate Animation Transitions', type: 'boolean', default: false },
                     enableKernelFailsafe: { label: 'Enable Kernel Failsafe (LLM Reprocessing Retry)', type: 'boolean', default: false },
                     pageSpecificTransitions: { label: 'Enable View-Specific Framer Motion Effects', type: 'boolean', default: true },
@@ -1884,8 +1872,6 @@ export const SystemTab: React.FC<SystemTabProps> = ({
               } as any,
               settings.developer || {
                 enableMultiTurnReasoning: true,
-                maxLoops: 3,
-                unlimitedLoops: false,
                 disableStageTransitions: false,
                 enableKernelFailsafe: false,
                 pageSpecificTransitions: true,

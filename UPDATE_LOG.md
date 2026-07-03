@@ -1,13 +1,6 @@
 # YuiHime Project Updates Logs
 ---
 
-## [3.19] - 2026-07-02
-### Added & Improved
-- **Pengaturan Batas Loop Kognitif (Manual & Unlimited)**:
-  - Menambahkan kolom pengaturan `maxLoops` (Maximum Loops / Batas Manual) dan `unlimitedLoops` (Unlimited Loops / Opsi Tanpa Batas) di bawah tab pengaturan sistem `SystemTab.tsx` (skema `developer`).
-  - Mengonfigurasi `cortexThinkEngine.ts` agar membaca nilai `maxLoops` dan `unlimitedLoops` dari berkas `config.toml` (melalui `settings.developer`) secara asinkron sebelum memulai putaran pemikiran AI.
-  - Mengimplementasikan sistem pengabaian batas loop kognitif tak terbatas jika opsi `unlimitedLoops` diaktifkan oleh pengguna.
-
 ## [3.18] - 2026-07-02
 ### Added & Improved
 - **Penyempurnaan Otorisasi Akses Berkas (Batch Mode & Konfigurasi Waktu Tunggu)**:

@@ -7,11 +7,6 @@ Dokumen ini memuat daftar lengkap dari seluruh modul kognitif, *add-ons*, jembat
 ## ⏳ Sejarah Pembaruan Modul
 *Dokumen ini wajib diperbarui setiap kali terjadi pembuatan, pemindahan, atau modifikasi fungsionalitas modul.*
 
-- **2026-07-02 (v3.19)**: **Pengaturan Batas Loop Kognitif (Manual & Unlimited)**:
-  - Menambahkan kolom pengaturan `maxLoops` (Batas Putaran Manual) dan `unlimitedLoops` (Opsi Tanpa Batas) di tab pengaturan sistem `SystemTab.tsx` (skema `developer`).
-  - Mengonfigurasi `cortexThinkEngine.ts` agar membaca nilai `maxLoops` dan `unlimitedLoops` dari berkas `config.toml` (melalui `settings.developer`) secara asinkron sebelum memulai putaran pemikiran AI.
-  - Mengimplementasikan sistem pengabaian batas loop kognitif tak terbatas jika opsi `unlimitedLoops` diaktifkan oleh pengguna.
-
 - **2026-07-02 (v3.18)**: **Penyempurnaan Otorisasi Akses Berkas (Batch Mode & Konfigurasi Waktu Tunggu)**:
   - Menambahkan endpoint batch `/api/sandbox/pending-confirmations/batch/action` untuk menyetujui (`approved`) atau menolak (`denied`) seluruh antrean berkas sekaligus.
   - Memperbarui panel **Modal Dialog File Access** di Web UI (`App.tsx`) untuk menampilkan daftar antrean berkas secara interaktif beserta tombol pintas **Batch Approve (Setujui Semua)** dan **Batch Deny (Tolak Semua / Clear All)**.
